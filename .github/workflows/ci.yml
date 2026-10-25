@@ -119,6 +119,7 @@ jobs:
 
       # Build only; nothing is pushed from PRs. Publishing happens in release.yml.
       - name: Build image
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: app
@@ -152,11 +153,10 @@ jobs:
           format: table
 
       - name: Trivy image scan (SARIF report)
-        if: always()
+        if: always() && steps.build.outcome == 'success'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: ${{ env.TRIVY_VERSION }}
-          skip-setup-trivy: true
           image-ref: ${{ env.IMAGE }}
           ignore-unfixed: true
           exit-code: "0"
