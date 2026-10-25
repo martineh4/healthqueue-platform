@@ -184,6 +184,7 @@ jobs:
       KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
       # Matches the kind node image used for the cluster (phase 7).
       KUBERNETES_VERSION: 1.37.0
+      CRDS_CATALOG_SHA: 501527ab9c40c827144c8f45945b25a023e344ce
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -201,23 +202,36 @@ jobs:
           tar -xzf kubeconform.tgz -C "$RUNNER_TEMP/bin" kubeconform
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-      - name: Render overlays
+      # rendered/app/ is ours and gets the full Trivy policy scan. Argo CD's upstream install
+      # is validated and digest-checked but not policy-scanned: its controllers need
+      # cluster-wide RBAC by design (ADR-0006).
+      - name: Render kustomizations
         run: |
-          mkdir -p rendered
+          mkdir -p rendered/app
           for overlay in deploy/overlays/*/; do
-            env=$(basename "$overlay")
-            kustomize build "$overlay" > "rendered/$env.yaml"
-            echo "rendered $env: $(grep -c '^kind:' "rendered/$env.yaml") objects"
+            kustomize build "$overlay" > "rendered/app/$(basename "$overlay").yaml"
+          done
+          kustomize build deploy/argocd > rendered/gitops.yaml
+          kustomize build deploy/argocd/install > rendered/argocd-install.yaml
+          for f in rendered/app/*.yaml rendered/*.yaml; do
+            echo "$f: $(grep -c '^kind:' "$f") objects"
           done
 
+      # Argo CD Application/AppProject schemas come from the CRDs catalog at a pinned commit.
+      # CRD definitions themselves have no published schema; the API server validates them.
       - name: Validate against Kubernetes ${{ env.KUBERNETES_VERSION }} schemas
-        run: kubeconform -strict -summary -kubernetes-version "$KUBERNETES_VERSION" rendered/*.yaml
+        run: |
+          kubeconform -strict -summary -kubernetes-version "$KUBERNETES_VERSION" \
+            -schema-location default \
+            -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/${CRDS_CATALOG_SHA}/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+            -skip CustomResourceDefinition \
+            rendered/app/*.yaml rendered/*.yaml
 
       # Deploy-by-digest is a supply-chain control (docs/supply-chain-slsa.md): a tag can be
-      # repointed, a digest cannot.
+      # repointed, a digest cannot. This covers Argo CD's own images too.
       - name: Require digest-pinned images
         run: |
-          if grep -nE '^\s*image:' rendered/*.yaml | grep -v '@sha256:[0-9a-f]\{64\}'; then
+          if grep -nE '^\s*image:' rendered/app/*.yaml rendered/*.yaml | grep -v '@sha256:[0-9a-f]\{64\}'; then
             echo "::error::every image must be pinned by @sha256 digest"; exit 1
           fi
           echo "all images pinned by digest"
@@ -227,7 +241,7 @@ jobs:
         with:
           version: ${{ env.TRIVY_VERSION }}
           scan-type: config
-          scan-ref: rendered
+          scan-ref: rendered/app
           severity: HIGH,CRITICAL
           exit-code: "1"
           format: table

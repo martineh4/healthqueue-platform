@@ -1,0 +1,22 @@
+# Argo CD itself, managed by Argo CD (the `argocd` Application) after the first install.
+#
+# Upstream manifests are referenced by commit SHA (the v3.5.4 tag's commit), not by tag:
+# a tag can be moved, a commit cannot. Images are pinned by digest for the same reason.
+# To upgrade: update the commit and all three digests together, in one pull request.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: argocd
+
+resources:
+  - namespace.yaml
+  # argoproj/argo-cd v3.5.4
+  - https://raw.githubusercontent.com/argoproj/argo-cd/d6d5b248ce00e1a2c512068002a93d3319767087/manifests/install.yaml
+
+images:
+  - name: quay.io/argoproj/argocd
+    digest: sha256:49dff79439bb38b1b942b19a113fe1fec7e6b6c671ddf9fe6a4a7c46bde0b77b # v3.5.4
+  - name: ghcr.io/dexidp/dex
+    digest: sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462 # v2.45.1
+  - name: public.ecr.aws/docker/library/redis
+    digest: sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba # 8.2.3-alpine

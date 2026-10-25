@@ -54,6 +54,10 @@ token credentials:
 2. Builds the `dockerconfigjson` in memory and pipes it over stdin into
    `kubectl apply --server-side`. Nothing is printed or written to disk. Server-side apply also
    avoids the `last-applied-configuration` annotation, which would duplicate the secret.
+   *Amended in phase 7:* `--stdin` accepts a password minted elsewhere. Run `az` on a
+   workstation and pipe its output over `gh codespace ssh`, so the Codespace never holds an
+   Azure login with registry rights. The script checks that the second line is a timestamp,
+   so swapped input is rejected.
 3. Annotates the Secret with the expiry (`healthqueue.io/credential-expires-at`).
    `create-pull-secret.sh status` reports the days left and warns under 7.
 

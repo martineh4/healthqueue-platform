@@ -12,8 +12,14 @@
 #   DAYS=7 deploy/scripts/create-pull-secret.sh     # shorter expiry (1-90)
 #   deploy/scripts/create-pull-secret.sh status     # show expiry of the current secret
 #
-# Needs: az (logged in with rights to generate token credentials, e.g. Contributor on the
-# registry), kubectl pointing at the target cluster.
+#   # Mint on a trusted workstation, install in a Codespace that has no Azure login:
+#   az acr token credential generate -r crhealthqueueora3w -n kind-pull --password1 \
+#       --expiration-in-days 30 --query "passwords[?name=='password1'] | [0].[value, expiry]" -o tsv \
+#     | gh codespace ssh -c <codespace> -- \
+#       'cd /workspaces/healthqueue-platform && deploy/scripts/create-pull-secret.sh --stdin'
+#
+# Needs: kubectl pointing at the target cluster, and either az (logged in with rights to
+# generate token credentials, e.g. Contributor on the registry) or --stdin.
 set -euo pipefail
 set +x # never trace: the password passes through variables below
 
@@ -42,19 +48,28 @@ if [[ "${1:-}" == "status" ]]; then
   exit 0
 fi
 
-[[ "$DAYS" =~ ^[0-9]+$ ]] && (( DAYS >= 1 && DAYS <= 90 )) || die "DAYS must be 1-90"
-for cmd in az kubectl base64; do
+for cmd in kubectl base64; do
   command -v "$cmd" >/dev/null || die "$cmd not found"
 done
+
+if [[ "${1:-}" == "--stdin" ]]; then
+  # Two lines on stdin: password, then expiry (the az query in the usage above).
+  { read -r password; read -r expiry; } < <(tr -d '\r')
+else
+  [[ "$DAYS" =~ ^[0-9]+$ ]] && (( DAYS >= 1 && DAYS <= 90 )) || die "DAYS must be 1-90"
+  command -v az >/dev/null || die "az not found (or pipe a password in with --stdin)"
+  echo "Generating a ${DAYS}-day password for ACR token $TOKEN_NAME (pull-only, healthqueue-api)..."
+  # az prints each element of the [value, expiry] list on its own line with -o tsv.
+  { read -r password; read -r expiry; } < <(az acr token credential generate \
+    --registry "$REGISTRY" --name "$TOKEN_NAME" --password1 --expiration-in-days "$DAYS" \
+    --query "passwords[?name=='password1'] | [0].[value, expiry]" -o tsv | tr -d '\r')
+fi
+[[ -n "${password:-}" && -n "${expiry:-}" ]] || die "no password/expiry received"
+date -u -d "$expiry" >/dev/null 2>&1 \
+  || die "expiry is not a timestamp; refusing (stdin order is password, then expiry)"
+
 kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 \
   || kubectl create namespace "$NAMESPACE" >/dev/null # Argo CD adopts it and adds PSA labels
-
-echo "Generating a ${DAYS}-day password for ACR token $TOKEN_NAME (pull-only, healthqueue-api)..."
-# az prints each element of the [value, expiry] list on its own line with -o tsv.
-{ read -r password; read -r expiry; } < <(az acr token credential generate \
-  --registry "$REGISTRY" --name "$TOKEN_NAME" --password1 --expiration-in-days "$DAYS" \
-  --query "passwords[?name=='password1'] | [0].[value, expiry]" -o tsv | tr -d '\r')
-[[ -n "$password" && -n "$expiry" ]] || die "ACR returned no password"
 
 auth=$(printf '%s:%s' "$TOKEN_NAME" "$password" | base64 -w0)
 unset password

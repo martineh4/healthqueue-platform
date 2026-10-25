@@ -5,7 +5,14 @@ deploy/
 ├── base/                 # environment-neutral manifests (not deployable alone)
 ├── overlays/
 │   └── prod/             # namespace, labels, image pinned by digest; Argo CD syncs this
+├── argocd/               # app of apps (ADR-0006)
+│   ├── root.yaml         #   the one object applied by hand
+│   ├── projects/         #   AppProjects: default (locked), platform, healthqueue
+│   ├── apps/             #   Applications: argocd (self-managed), healthqueue-api
+│   └── install/          #   Argo CD v3.5.4, commit-pinned manifest + digest-pinned images
+├── kind/cluster.yaml     # kind v0.33 cluster, Kubernetes 1.37 node pinned by digest
 └── scripts/
+    ├── bootstrap-cluster.sh    # cluster + Argo CD + root, idempotent
     └── create-pull-secret.sh   # pull-only, expiring registry credential (ADR-0004)
 ```
 
@@ -31,24 +38,28 @@ Pod Security Standard**, so any pod that is not hardened as above is rejected at
 
 ## Checks on every pull request (`manifests` job in `ci.yml`)
 
-1. `kustomize build` for every overlay (kustomize v5.8.3, checksum-verified).
+1. `kustomize build` for every overlay, for `deploy/argocd` and for `deploy/argocd/install`
+   (kustomize v5.8.3, checksum-verified).
 2. `kubeconform -strict` against the Kubernetes 1.37 schemas, the same version as the kind node
-   image.
-3. Every `image:` must be pinned by `@sha256:` digest.
-4. Trivy misconfiguration scan of the **rendered** output (HIGH and CRITICAL fail the build).
+   image. Argo CD Applications and AppProjects are validated against their CRD schemas, from the
+   CRDs catalog at a pinned commit.
+3. Every `image:` must be pinned by `@sha256:` digest, Argo CD's own images included.
+4. Trivy misconfiguration scan of the rendered **application** output (HIGH and CRITICAL fail
+   the build).
 
-## First deploy on a new cluster
-
-Phase 7 automates the sync with Argo CD. The pull secret is always created by hand, because it
-is the one thing that must never come from Git:
+## Bringing up a cluster (Codespace, 4-core machine)
 
 ```bash
-az login                                   # an identity that can generate ACR token passwords
-deploy/scripts/create-pull-secret.sh       # 30-day password, straight into the cluster
-deploy/scripts/create-pull-secret.sh status
-kubectl apply -k deploy/overlays/prod      # until Argo CD takes over in phase 7
+deploy/scripts/bootstrap-cluster.sh    # kind + Argo CD; stops at step 3 if acr-pull is missing
+# create the pull secret (one of):
+deploy/scripts/create-pull-secret.sh   #   if `az login` was done in the Codespace
+#   ...or pipe a password from your workstation with --stdin (see the script header)
+deploy/scripts/bootstrap-cluster.sh    # re-run: applies the root app, waits for Healthy
 kubectl -n healthqueue port-forward svc/healthqueue-api 8000:80
 ```
+
+After that, nothing is applied by hand: Argo CD syncs `main` every 3 minutes and reverts manual
+changes. The pull secret is the one exception, because it must never come from Git.
 
 Pull failures: [runbook](../docs/runbooks/image-pull-failures.md).
 
