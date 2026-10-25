@@ -6,14 +6,19 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 5.9.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.9.1"
+    }
   }
 
-  # Remote state in the bootstrap storage account. Locking uses blob leases, so two
-  # concurrent applies (e.g. a CI run and a laptop) cannot corrupt state.
+  # Remote state in the bootstrap storage account, in a container that holds only this
+  # environment's state, so CI identities can be granted access to exactly one state file.
+  # Locking uses blob leases: two concurrent applies cannot corrupt state.
   backend "azurerm" {
     resource_group_name  = "rg-healthqueue-tfstate"
     storage_account_name = "sthqtfstateprryv"
-    container_name       = "tfstate"
+    container_name       = "tfstate-prod"
     key                  = "prod.tfstate"
     use_azuread_auth     = true
   }
@@ -52,11 +57,8 @@ provider "azurerm" {
   subscription_id     = var.subscription_id
   storage_use_azuread = true
 
-  resource_providers_to_register = [
-    "Microsoft.ContainerRegistry",
-    "Microsoft.ManagedIdentity",
-    "Microsoft.Storage",
-  ]
+  # No resource provider registration (the 5.x default): that needs subscription-level
+  # rights, which the CI identities deliberately lack. The bootstrap registers them.
 
   features {}
 }

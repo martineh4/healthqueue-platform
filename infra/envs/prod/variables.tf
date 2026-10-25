@@ -21,3 +21,15 @@ variable "subscription_id" {
   type        = string
   sensitive   = true
 }
+
+variable "github_oidc_subject_prefix" {
+  description = "Prefix of this repository's immutable GitHub OIDC `sub` claim. See bootstrap/variables.tf."
+  type        = string
+  default     = "repo:martineh4@230047607/healthqueue-platform@1432743551"
+}
+
+variable "evidence_retention_days" {
+  description = "WORM retention for release evidence. Short for the course; 2190 (six years) in production."
+  type        = number
+  default     = 7
+}
