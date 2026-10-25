@@ -31,8 +31,12 @@ provider "azurerm" {
   # Data-plane calls (blob containers) use Entra ID, matching shared_access_key_enabled = false.
   storage_use_azuread = true
 
+  # Registered here, by a subscription Owner, so that environment configurations (run by
+  # CI identities scoped to one resource group) never need subscription-level rights.
   resource_providers_to_register = [
+    "Microsoft.ContainerRegistry",
     "Microsoft.KeyVault",
+    "Microsoft.ManagedIdentity",
     "Microsoft.Storage",
   ]
 

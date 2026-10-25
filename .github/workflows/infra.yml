@@ -1,0 +1,263 @@
+# Infrastructure delivery for envs/prod: PR-driven, with no stored cloud credentials.
+#
+#   pull request  -> tofu-validate, then tofu-plan (read-only identity), posted as a PR comment
+#   merge to main -> tofu-apply in the `prod` GitHub environment (apply identity)
+#   daily         -> drift check; opens or updates a `drift` issue if reality has diverged
+#
+# Azure access is OpenID Connect federation to user-assigned managed identities created by
+# infra/bootstrap; see docs/adr/0003-github-actions-workload-identity.md. The bootstrap
+# itself is applied by a human and is only validated here.
+name: Infra
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per PR (newer pushes cancel older plans); everything touching real state
+  # (apply, drift) queues behind a single group and is never cancelled mid-run.
+  group: infra-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'prod' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  TOFU_VERSION: 1.13.1
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TOFU_DIR: infra/envs/prod
+  # Not ARM_SUBSCRIPTION_ID: see infra/README.md (azure_vault key provider + Azure CLI).
+  TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      infra: ${{ steps.diff.outputs.infra }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
+            infra=true
+          elif git diff --name-only "$BASE" HEAD | grep -qE '^(infra/|\.github/workflows/infra\.yml$)'; then
+            infra=true
+          else
+            infra=false
+          fi
+          echo "infra=$infra" | tee -a "$GITHUB_OUTPUT"
+
+  validate:
+    name: tofu-validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+
+      - name: Format
+        run: tofu fmt -check -recursive -diff infra
+
+      - name: Validate every root module
+        run: |
+          for dir in infra/bootstrap infra/envs/*/; do
+            echo "::group::$dir"
+            tofu -chdir="$dir" init -backend=false -lockfile=readonly
+            tofu -chdir="$dir" validate
+            echo "::endgroup::"
+          done
+
+  plan:
+    name: tofu-plan
+    needs: [changes, validate]
+    # A skipped job satisfies a required check, so PRs that do not touch infra pass.
+    # Dependabot PRs get no Actions secrets; their plan happens at apply time on merge.
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.changes.outputs.infra == 'true' &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # OIDC token for Azure
+      pull-requests: write # plan comment
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_TOFU_PLAN }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Init
+        run: tofu -chdir="$TOFU_DIR" init -lockfile=readonly
+
+      # -lock=false: the plan identity has read-only state access (a lease is a write).
+      # The plan is advisory; the apply job re-plans under a lock.
+      - name: Plan
+        id: plan
+        run: |
+          set +e
+          tofu -chdir="$TOFU_DIR" plan -lock=false -no-color -out=tfplan > plan.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            tofu -chdir="$TOFU_DIR" show -no-color tfplan > plan.txt
+          else
+            cp plan.log plan.txt
+          fi
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Comment plan on PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          EXITCODE: ${{ steps.plan.outputs.exitcode }}
+          SUB_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          .github/scripts/plan-comment.sh plan.txt "$EXITCODE" "$SHA" > comment.md
+          cat comment.md >> "$GITHUB_STEP_SUMMARY"
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md --edit-last --create-if-none
+
+      - name: Fail if plan failed
+        if: steps.plan.outputs.exitcode != '0'
+        run: exit 1
+
+  apply:
+    name: tofu-apply
+    needs: [changes, validate]
+    if: github.event_name == 'push' && needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # The `prod` environment only accepts deployments from main, and the apply identity's
+    # federated credential only trusts tokens issued for this environment.
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }} # environment secret: apply identity
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Init
+        run: tofu -chdir="$TOFU_DIR" init -lockfile=readonly
+
+      - name: Plan (locked)
+        run: |
+          tofu -chdir="$TOFU_DIR" plan -no-color -out=tfplan
+          tofu -chdir="$TOFU_DIR" show -no-color tfplan > plan.txt
+
+      - name: Apply
+        run: tofu -chdir="$TOFU_DIR" apply -no-color tfplan
+
+      - name: Summary
+        if: always()
+        env:
+          SUB_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          [ -f plan.txt ] || exit 0
+          .github/scripts/plan-comment.sh plan.txt 0 "$GITHUB_SHA" "Applied to prod" >> "$GITHUB_STEP_SUMMARY"
+
+  drift:
+    name: tofu-drift
+    needs: [validate]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_TOFU_PLAN }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Init
+        run: tofu -chdir="$TOFU_DIR" init -lockfile=readonly
+
+      # -detailed-exitcode: 0 = in sync, 1 = error, 2 = drift.
+      - name: Detect drift
+        id: drift
+        run: |
+          set +e
+          tofu -chdir="$TOFU_DIR" plan -lock=false -no-color -detailed-exitcode -out=tfplan > plan.log 2>&1
+          code=$?
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -eq 2 ]; then tofu -chdir="$TOFU_DIR" show -no-color tfplan > plan.txt; else cp plan.log plan.txt; fi
+          [ "$code" -ne 1 ] || { cat plan.log; exit 1; }
+
+      - name: Open or update drift issue
+        if: steps.drift.outputs.exitcode == '2'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUB_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          .github/scripts/plan-comment.sh plan.txt 0 "$GITHUB_SHA" "Drift detected in prod" > body.md
+          cat body.md >> "$GITHUB_STEP_SUMMARY"
+          issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body-file body.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label drift \
+              --title "Infrastructure drift detected in prod" --body-file body.md
+          fi
+          exit 1

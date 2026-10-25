@@ -31,6 +31,9 @@ Requirements:
 
 - State for every configuration lives in **one Azure Storage account** (`sthqtfstate…`) in the
   `rg-healthqueue-tfstate` resource group, one blob per configuration.
+  *Amended by [ADR-0003](0003-github-actions-workload-identity.md):* each environment's blob
+  sits in its own container (`tfstate-<env>`), so CI roles can be scoped to one environment.
+  The bootstrap state stays in `tfstate`.
 - The `azurerm` backend uses **blob leases** for locking. A held lease makes any other
   `plan`/`apply` fail fast with *"state blob is already locked"*.
 - **Entra ID only:** shared-key and SAS access are disabled on the account. Access is granted

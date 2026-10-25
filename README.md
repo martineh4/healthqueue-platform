@@ -1,16 +1,17 @@
-﻿# HealthQueue Platform
+# HealthQueue Platform
 
 Reference DevOps architecture for the HealthQueue patient appointment scheduling API:
 CI/CD with supply-chain security, OpenTofu on Azure, and GitOps delivery to Kubernetes via Argo CD.
 
-> Status: work in progress. Phases 0â€“1 (repo skeleton, API + tests) are complete.
+> Status: work in progress. Phases 0–4 are complete: API and tests, PR pipeline, encrypted
+> remote state, and PR-driven infrastructure delivery with OIDC (no stored cloud credentials).
 
 ## Repository layout
 
 | Path | Purpose |
 |---|---|
 | `app/` | FastAPI appointment API, tests, Dockerfile |
-| `.github/workflows/` | CI (PR checks), release (build â†’ scan â†’ SBOM â†’ sign â†’ attest), infra |
+| `.github/workflows/` | CI (PR checks), release (build → scan → SBOM → sign → attest), infra |
 | `infra/` | OpenTofu: state bootstrap, Azure modules, `prod` environment |
 | `deploy/` | Kustomize base/overlays and Argo CD applications |
 | `observability/` | SLO recording rules, burn-rate alerts, dashboards |

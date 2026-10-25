@@ -5,7 +5,10 @@ variable "location" {
 }
 
 variable "environments" {
-  description = "Environments that get their own state encryption key (one key per state file)."
+  description = <<-EOT
+    Environments to provision. Each gets its own resource group, state container, state
+    encryption key, and a pair of GitHub Actions identities (plan and apply).
+  EOT
   type        = set(string)
   default     = ["prod"]
 }
@@ -17,6 +20,17 @@ variable "state_admin_object_ids" {
   EOT
   type        = list(string)
   default     = []
+}
+
+variable "github_oidc_subject_prefix" {
+  description = <<-EOT
+    Prefix of the `sub` claim in this repository's GitHub Actions OIDC tokens. The repository
+    uses immutable subjects (owner and repository IDs, not just names), so a deleted and
+    re-created repository with the same name cannot assume these identities. Read it with:
+    gh api repos/OWNER/REPO/actions/oidc/customization/sub --jq .sub_claim_prefix
+  EOT
+  type        = string
+  default     = "repo:martineh4@230047607/healthqueue-platform@1432743551"
 }
 
 variable "tags" {
