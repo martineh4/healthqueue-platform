@@ -1,0 +1,11 @@
+# SQLite database file. ReadWriteOnce: exactly one pod may write (ADR-0005).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: healthqueue-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,32 @@
+# Default deny for everything in the namespace, in both directions.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# The API makes no outbound calls (no DNS, no external services), so it gets no egress.
+# Inbound HTTP is allowed only from Prometheus (phase 10). kubectl port-forward is not
+# subject to NetworkPolicy, so operators can still reach the pod for debugging.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: healthqueue-api-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: healthqueue-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: http
+          protocol: TCP

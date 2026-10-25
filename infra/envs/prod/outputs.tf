@@ -19,3 +19,8 @@ output "release_client_id" {
   value       = azurerm_user_assigned_identity.release.client_id
   sensitive   = true
 }
+
+output "kind_pull_token_name" {
+  description = "ACR token used by deploy/scripts/create-pull-secret.sh. The token has no stored password."
+  value       = azurerm_container_registry_token.kind_pull.name
+}

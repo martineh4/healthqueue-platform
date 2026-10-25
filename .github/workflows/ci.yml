@@ -172,3 +172,62 @@ jobs:
         with:
           sarif_file: trivy-image.sarif
           category: trivy-image
+
+  manifests:
+    name: manifests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      KUSTOMIZE_VERSION: v5.8.3
+      KUSTOMIZE_SHA256: cb9e31198d3f63b44848bd0afc4c8efc56e6cfef9c93a4a39a211940e6decd61
+      KUBECONFORM_VERSION: v0.8.0
+      KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+      # Matches the kind node image used for the cluster (phase 7).
+      KUBERNETES_VERSION: 1.37.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Pinned binaries verified against checksums recorded here, not fetched alongside them.
+      - name: Install kustomize and kubeconform
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSLo kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          echo "$KUSTOMIZE_SHA256  kustomize.tgz" | sha256sum --check --strict
+          curl -fsSLo kubeconform.tgz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "$KUBECONFORM_SHA256  kubeconform.tgz" | sha256sum --check --strict
+          tar -xzf kustomize.tgz -C "$RUNNER_TEMP/bin" kustomize
+          tar -xzf kubeconform.tgz -C "$RUNNER_TEMP/bin" kubeconform
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Render overlays
+        run: |
+          mkdir -p rendered
+          for overlay in deploy/overlays/*/; do
+            env=$(basename "$overlay")
+            kustomize build "$overlay" > "rendered/$env.yaml"
+            echo "rendered $env: $(grep -c '^kind:' "rendered/$env.yaml") objects"
+          done
+
+      - name: Validate against Kubernetes ${{ env.KUBERNETES_VERSION }} schemas
+        run: kubeconform -strict -summary -kubernetes-version "$KUBERNETES_VERSION" rendered/*.yaml
+
+      # Deploy-by-digest is a supply-chain control (docs/supply-chain-slsa.md): a tag can be
+      # repointed, a digest cannot.
+      - name: Require digest-pinned images
+        run: |
+          if grep -nE '^\s*image:' rendered/*.yaml | grep -v '@sha256:[0-9a-f]\{64\}'; then
+            echo "::error::every image must be pinned by @sha256 digest"; exit 1
+          fi
+          echo "all images pinned by digest"
+
+      - name: Trivy misconfiguration scan (rendered manifests)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: config
+          scan-ref: rendered
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          format: table

@@ -1,0 +1,28 @@
+# Environment-neutral definition of the HealthQueue API. Overlays set the namespace and pin
+# the image digest; nothing here is deployable on its own.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: healthqueue-api
+      app.kubernetes.io/component: api
+    includeSelectors: true
+
+resources:
+  - serviceaccount.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+
+# Non-secret runtime settings. The generated name carries a content hash, so changing a
+# value rolls the Deployment automatically.
+configMapGenerator:
+  - name: healthqueue-api-config
+    literals:
+      - HQ_DB_PATH=/data/healthqueue.db
+      - HQ_LOG_LEVEL=INFO
+      - HQ_CLINIC_OPEN_HOUR=9
+      - HQ_CLINIC_CLOSE_HOUR=17
+      - HQ_SLOT_MINUTES=30

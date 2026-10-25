@@ -1,0 +1,23 @@
+# Production: what Argo CD syncs to the cluster (phase 7). The image is pinned by digest
+# to a release that release.yml built, scanned, signed and attested. Phase 8 automates
+# the digest bump as a pull request.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: healthqueue
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: healthqueue
+      app.kubernetes.io/environment: prod
+    includeSelectors: false
+
+images:
+  - name: healthqueue-api
+    newName: crhealthqueueora3w.azurecr.io/healthqueue-api
+    # Release evidence: release-evidence/healthqueue-api/b0a6df1cde36b9c96ee11dbe8a5f39492d75c4fc/
+    digest: sha256:469946516b8149d0714f1b68bab168601ad4ffd2cb20d29d6162ed516dfe59f5

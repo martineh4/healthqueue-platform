@@ -128,3 +128,33 @@ resource "azurerm_role_assignment" "release_evidence_write" {
   principal_id         = azurerm_user_assigned_identity.release.principal_id
   principal_type       = "ServicePrincipal"
 }
+
+# ---------------------------------------------------------------------------
+# Pull-only registry token for the kind cluster (ADR-0004)
+# ---------------------------------------------------------------------------
+
+# Read access to one repository, nothing else: no push, no delete, no other repositories.
+# metadata/read lets clients list tags and referrers (signatures, attestations), which
+# signature verification at admission (phase 9) needs.
+resource "azurerm_container_registry_scope_map" "api_pull" {
+  name                    = "healthqueue-api-pull"
+  description             = "Pull healthqueue-api images and their signatures. Nothing else."
+  container_registry_name = azurerm_container_registry.main.name
+  resource_group_name     = local.rg.name
+  actions = [
+    "repositories/healthqueue-api/content/read",
+    "repositories/healthqueue-api/metadata/read",
+  ]
+}
+
+# Deliberately no azurerm_container_registry_token_password: a password resource would put
+# the secret in state, which the PR plan identity can decrypt. Passwords are generated with
+# an expiry, at the moment they are needed, by deploy/scripts/create-pull-secret.sh, and go
+# straight into the cluster. Setting enabled = false here revokes every password at once.
+resource "azurerm_container_registry_token" "kind_pull" {
+  name                    = "kind-pull"
+  container_registry_name = azurerm_container_registry.main.name
+  resource_group_name     = local.rg.name
+  scope_map_id            = azurerm_container_registry_scope_map.api_pull.id
+  enabled                 = true
+}
