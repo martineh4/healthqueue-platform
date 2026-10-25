@@ -71,7 +71,10 @@ open a PR that brings the code in line, so the next CI apply does not revert the
 | `release` environment secret | `AZURE_CLIENT_ID` (`release_client_id` output of envs/prod) |
 | Label | `drift` |
 
-Values come from `tofu -chdir=infra/bootstrap output -json github_oidc`.
+Values come from `tofu -chdir=infra/bootstrap output -json github_oidc`. Set them with
+`gh secret set NAME --body "$VALUE"` from bash. **Do not pipe values into `gh secret set` from
+Windows PowerShell 5.1:** it prepends a byte-order mark, the secret becomes `﻿<guid>`,
+Azure CLI rejects it, and GitHub's log masking no longer matches the real ID.
 
 ## Bootstrapping from scratch
 
