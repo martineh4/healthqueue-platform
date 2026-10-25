@@ -1,7 +1,7 @@
 """SQLite-backed appointment store.
 
-The store is deliberately small and synchronous; its interface (book, get, list,
-cancel, booked_between) is what a Postgres implementation would replace.
+The store is deliberately small and synchronous; its interface (book, get,
+find, cancel, booked_between) is what a Postgres implementation would replace.
 """
 
 import sqlite3
@@ -106,7 +106,7 @@ class AppointmentStore:
             raise NotFoundError(appointment_id)
         return self._to_model(row)
 
-    def list(
+    def find(
         self, provider_id: str | None = None, patient_id: str | None = None
     ) -> list[Appointment]:
         query = "SELECT * FROM appointments WHERE 1 = 1"

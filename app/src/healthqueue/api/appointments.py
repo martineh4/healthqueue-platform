@@ -67,7 +67,7 @@ def list_appointments(
 ) -> list[Appointment]:
     if not provider_id and not patient_id:
         raise HTTPException(422, "filter by provider_id or patient_id")
-    return store.list(provider_id=provider_id, patient_id=patient_id)
+    return store.find(provider_id=provider_id, patient_id=patient_id)
 
 
 @router.get("/appointments/{appointment_id}")

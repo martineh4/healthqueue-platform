@@ -20,6 +20,9 @@ CI/CD with supply-chain security, OpenTofu on Azure, and GitOps delivery to Kube
 
 ## Quickstart (no Docker required)
 
+Use Python 3.13 to match CI and the container image (`uv venv --python 3.13` works if it is
+not installed).
+
 ```bash
 cd app
 python -m venv .venv
