@@ -50,7 +50,8 @@ kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 \
   || kubectl create namespace "$NAMESPACE" >/dev/null # Argo CD adopts it and adds PSA labels
 
 echo "Generating a ${DAYS}-day password for ACR token $TOKEN_NAME (pull-only, healthqueue-api)..."
-read -r password expiry < <(az acr token credential generate \
+# az prints each element of the [value, expiry] list on its own line with -o tsv.
+{ read -r password; read -r expiry; } < <(az acr token credential generate \
   --registry "$REGISTRY" --name "$TOKEN_NAME" --password1 --expiration-in-days "$DAYS" \
   --query "passwords[?name=='password1'] | [0].[value, expiry]" -o tsv | tr -d '\r')
 [[ -n "$password" && -n "$expiry" ]] || die "ACR returned no password"
