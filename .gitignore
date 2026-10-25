@@ -28,3 +28,8 @@ sbom*.json
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
+
+# Registry credentials must never be committed (ADR-0004)
+.dockerconfigjson
+*dockerconfig*.json
+*pull-secret*.yaml
