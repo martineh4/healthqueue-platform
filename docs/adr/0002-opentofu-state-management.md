@@ -89,7 +89,12 @@ not client-side encrypted.** We accept this deliberately:
   layer deliberate and multi-step. That friction is intended.
 - **Public endpoints.** Storage and Key Vault endpoints are publicly reachable because
   GitHub-hosted runners have no fixed IPs. RBAC, not the network, is the boundary. A production
-  hardening step is self-hosted runners with private endpoints.
+  hardening step is self-hosted runners with private endpoints. The CI misconfiguration scan
+  flags this as CRITICAL (Trivy AZU-0012, AZU-0013). We accept it with inline suppressions that
+  **expire on 2027-04-30**, so the pipeline fails again on that date and forces a re-review
+  instead of the exception living forever. The alternative, CI adding its runner IP to the
+  firewall on every run, was rejected: concurrent runs race on the rules, and the CI identity
+  would need network-admin rights on the state account.
 - **No vault audit logs yet.** Key Vault diagnostic logs are not shipped anywhere until a Log
   Analytics workspace exists (observability phase).
 

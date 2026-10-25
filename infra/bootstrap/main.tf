@@ -36,6 +36,9 @@ resource "azurerm_management_lock" "state" {
 # State storage
 # ---------------------------------------------------------------------------
 
+# Accepted risk (ADR-0002): public endpoint with RBAC as the boundary, because
+# GitHub-hosted runners have no fixed IPs. Expiry forces a review.
+#trivy:ignore:AZU-0012:exp:2027-04-30
 resource "azurerm_storage_account" "state" {
   name                = "sthqtfstate${local.suffix}"
   resource_group_name = azurerm_resource_group.state.name
@@ -95,6 +98,8 @@ resource "azurerm_role_assignment" "state_blob_admin" {
 # State encryption keys
 # ---------------------------------------------------------------------------
 
+# Accepted risk (ADR-0002): same reasoning as the storage account above.
+#trivy:ignore:AZU-0013:exp:2027-04-30
 resource "azurerm_key_vault" "state" {
   name                = "kv-hq-tfstate-${local.suffix}"
   resource_group_name = azurerm_resource_group.state.name
