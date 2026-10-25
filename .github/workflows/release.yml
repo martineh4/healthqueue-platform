@@ -207,7 +207,7 @@ jobs:
               sbom: { format: $spdx[0].spdxVersion, packages: ($spdx[0].packages | length) },
               vulnerabilities: (
                 [$trivy[0].Results[]?.Vulnerabilities[]?.Severity]
-                | group_by(.) | map({key: ., value: length}) | from_entries
+                | group_by(.) | map({key: .[0], value: length}) | from_entries
               )
             }' > evidence/release.json
           cat evidence/release.json
