@@ -189,3 +189,17 @@ resource "azurerm_role_assignment" "apply_state_key" {
   principal_id         = azurerm_user_assigned_identity.apply[each.key].principal_id
   principal_type       = "ServicePrincipal"
 }
+
+# ---------------------------------------------------------------------------
+# Human read access to environment data (release evidence) for state admins.
+# Granted here because the apply identity may not assign roles to users (ADR-0003).
+# Read-only: evidence is written by the release identity and is immutable anyway.
+# ---------------------------------------------------------------------------
+
+resource "azurerm_role_assignment" "admin_env_blob_read" {
+  for_each = { for pair in setproduct(tolist(local.envs), tolist(local.admin_ids)) :
+  "${pair[0]}/${pair[1]}" => { env = pair[0], principal = pair[1] } }
+  scope                = azurerm_resource_group.env[each.value.env].id
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = each.value.principal
+}

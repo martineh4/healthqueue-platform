@@ -205,9 +205,14 @@ jobs:
               signature: { tool: "cosign keyless", identity: $signer },
               attestations: { slsa_provenance: $provenance, sbom: $sbom },
               sbom: { format: $spdx[0].spdxVersion, packages: ($spdx[0].packages | length) },
+              # Split by whether a fix exists: the gate blocks fixable HIGH/CRITICAL;
+              # unfixed findings are tracked risk (docs/supply-chain-slsa.md).
               vulnerabilities: (
-                [$trivy[0].Results[]?.Vulnerabilities[]?.Severity]
-                | group_by(.) | map({key: .[0], value: length}) | from_entries
+                [$trivy[0].Results[]?.Vulnerabilities[]? | {s: .Severity, f: ((.FixedVersion // "") != "")}]
+                | {
+                    fixable: (map(select(.f)) | group_by(.s) | map({key: .[0].s, value: length}) | from_entries),
+                    unfixed: (map(select(.f | not)) | group_by(.s) | map({key: .[0].s, value: length}) | from_entries)
+                  }
               )
             }' > evidence/release.json
           cat evidence/release.json
