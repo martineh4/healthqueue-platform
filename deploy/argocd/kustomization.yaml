@@ -1,0 +1,12 @@
+# What the `root` Application syncs. `install/` is not listed: the `argocd` Application
+# manages it separately, with pruning disabled.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - projects/default.yaml
+  - projects/platform.yaml
+  - projects/healthqueue.yaml
+  - apps/argocd.yaml
+  - apps/healthqueue-api.yaml
+  - root.yaml

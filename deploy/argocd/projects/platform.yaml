@@ -1,0 +1,19 @@
+# Argo CD's own installation and the app-of-apps root. Broad by necessity (CRDs,
+# ClusterRoles), so only this repository may feed it and only `argocd` is a target namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: Argo CD itself and the Applications/AppProjects that define everything else.
+  sourceRepos:
+    - https://github.com/martineh4/healthqueue-platform.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: argocd
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"

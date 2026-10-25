@@ -1,0 +1,22 @@
+# Argo CD manages its own installation: upgrades are pull requests to deploy/argocd/install.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+  # No resources finalizer: deleting this Application must never uninstall Argo CD.
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/martineh4/healthqueue-platform.git
+    targetRevision: main
+    path: deploy/argocd/install
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: false # never let a bad commit delete Argo CD's own components
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true # Argo CD's CRDs exceed the client-side apply annotation limit

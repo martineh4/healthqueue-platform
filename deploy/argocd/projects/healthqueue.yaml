@@ -1,0 +1,33 @@
+# The HealthQueue API: one namespace, and only the kinds deploy/overlays/prod contains.
+# A manifest that sneaks in a ClusterRole, a Secret or a workload in another namespace is
+# refused by Argo CD before it reaches the cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: healthqueue
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: HealthQueue appointment API.
+  sourceRepos:
+    - https://github.com/martineh4/healthqueue-platform.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: healthqueue
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: apps
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: networking.k8s.io
+      kind: NetworkPolicy

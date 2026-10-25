@@ -1,0 +1,31 @@
+# The appointment API. Merging to main is the deployment: Argo CD syncs within its polling
+# interval (default 3 minutes) and reverts any manual change to the cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: healthqueue-api
+  namespace: argocd
+  # No resources finalizer: deleting the Application stops management but leaves the
+  # running service and its data in place. Removal is a deliberate, separate act.
+spec:
+  project: healthqueue
+  source:
+    repoURL: https://github.com/martineh4/healthqueue-platform.git
+    targetRevision: main
+    path: deploy/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: healthqueue
+  revisionHistoryLimit: 10
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

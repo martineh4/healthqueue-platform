@@ -1,0 +1,15 @@
+# Argo CD's built-in `default` project allows any repository, any cluster, any kind.
+# Locking it down means every Application must use a project that states its limits.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: default
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: Disabled. Use a dedicated project.
+  sourceRepos: []
+  destinations: []
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist: []

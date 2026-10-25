@@ -1,0 +1,9 @@
+# Local cluster for the Codespace (ADR-0006). Node image pinned by digest, as published in
+# the kind v0.33.0 release notes; kubeconform in CI validates against the same version.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: healthqueue
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+# Default CNI (kindnet) enforces NetworkPolicy, which deploy/base relies on.
