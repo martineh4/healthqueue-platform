@@ -139,6 +139,9 @@ jobs:
           done
           curl -fsS http://localhost:8000/healthz
           test "$(docker exec api id -u)" = "10001" || { echo "container must run as UID 10001"; exit 1; }
+          if docker exec api python -m pip --version 2>/dev/null; then
+            echo "runtime image must not ship pip"; exit 1
+          fi
           docker logs api | head -5
           docker rm -f api
 

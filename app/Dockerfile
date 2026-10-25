@@ -13,9 +13,12 @@ COPY requirements.lock ./
 RUN /opt/venv/bin/pip install --require-hashes -r requirements.lock
 COPY pyproject.toml ./
 COPY src ./src
-RUN /opt/venv/bin/pip install --no-deps .
+RUN /opt/venv/bin/pip install --no-deps . \
+ && /opt/venv/bin/pip uninstall --yes pip
 
-# ---- runtime: no build tooling, no shell-level package installs, non-root ----
+# ---- runtime: no package manager, no build tooling, non-root ----
+# pip is removed from the image: the app never needs it, and its vendored libraries
+# (urllib3, msgpack, pkg_resources) were the only scanner findings in the image.
 FROM ${PYTHON_IMAGE} AS runtime
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="healthqueue-api" \
@@ -25,7 +28,9 @@ LABEL org.opencontainers.image.title="healthqueue-api" \
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
-RUN groupadd --system --gid 10001 app \
+RUN python -m pip uninstall --yes pip \
+ && rm -rf /usr/local/lib/python3.13/ensurepip \
+ && groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 COPY --from=build /opt/venv /opt/venv
 USER 10001:10001
