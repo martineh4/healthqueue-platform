@@ -7,16 +7,6 @@ data "azurerm_resource_group" "prod" {
   name = "rg-healthqueue-prod"
 }
 
-# Phase 3 created the resource group here; phase 4 moved it to the bootstrap.
-# Forget it without destroying it. Safe to delete once applied.
-removed {
-  from = azurerm_resource_group.prod
-
-  lifecycle {
-    destroy = false
-  }
-}
-
 resource "random_string" "suffix" {
   length  = 5
   upper   = false
