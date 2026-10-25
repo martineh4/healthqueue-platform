@@ -1,0 +1,247 @@
+# Release pipeline: every merge to main that touches the app produces a signed, attested
+# image in Azure Container Registry, plus a write-once evidence record.
+#
+#   build -> Trivy gate -> SBOM -> push (exact scanned image) -> cosign sign (keyless)
+#   -> SLSA provenance + SBOM attestations -> verify all three -> evidence to WORM storage
+#
+# Images are only ever referenced by digest downstream (GitOps, phase 8). The tag is a
+# convenience for humans and is never trusted. See docs/supply-chain-slsa.md.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  TRIVY_VERSION: v0.75.0
+  COSIGN_VERSION: v3.1.3
+  REGISTRY: crhealthqueueora3w.azurecr.io
+  REPOSITORY: healthqueue-api
+  EVIDENCE_ACCOUNT: sthqevidenceora3w
+  EVIDENCE_CONTAINER: release-evidence
+  # Keyless signatures and provenance are bound to this workflow on main. Verifiers
+  # (cosign, gh attestation verify, Kyverno) pin exactly this identity.
+  SIGNER_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/heads/main
+  OIDC_ISSUER: https://token.actions.githubusercontent.com
+
+jobs:
+  release:
+    name: build-sign-attest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Only main can deploy to `release`, and the release identity's federated credential
+    # trusts only tokens issued for this environment.
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # Azure login, Sigstore keyless signing, attestations
+      attestations: write # GitHub attestation store
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set image reference
+        run: |
+          mkdir -p evidence
+          echo "IMAGE=$REGISTRY/$REPOSITORY" >> "$GITHUB_ENV"
+          echo "TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Build into the local daemon first: nothing reaches the registry until it has
+      # passed the vulnerability gate.
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: app
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          build-args: VERSION=${{ github.sha }}
+          # Provenance and SBOM are produced below as signed, verifiable attestations.
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy image scan (gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Trivy image scan (full JSON report for evidence)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          skip-setup-trivy: true
+          image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
+          exit-code: "0"
+          format: json
+          output: evidence/trivy-image.json
+
+      - name: Generate SBOM (Syft, SPDX)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.IMAGE }}:${{ env.TAG }}
+          format: spdx-json
+          output-file: evidence/sbom.spdx.json
+          upload-artifact: false
+          dependency-snapshot: false
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }} # environment secret: id-hq-release
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR (Entra token, no admin user)
+        run: az acr login --name "${REGISTRY%%.*}"
+
+      - name: Push the scanned image
+        id: push
+        run: |
+          docker push "$IMAGE:$TAG" | tee push.log
+          digest=$(grep -oE 'digest: sha256:[0-9a-f]{64}' push.log | head -n1 | cut -d' ' -f2)
+          [ -n "$digest" ] || { echo "could not read digest from docker push"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "REF=$IMAGE@$digest" >> "$GITHUB_ENV"
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      # Keyless: Fulcio issues a short-lived certificate for this workflow's OIDC identity
+      # and the signature is recorded in the public Rekor transparency log. No signing key
+      # exists to be stolen or rotated.
+      - name: Sign image (cosign keyless)
+        run: cosign sign --yes "$REF"
+
+      - name: Attest SLSA build provenance
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false # only supported for organisation-owned repos
+
+      - name: Attest SBOM
+        id: sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: evidence/sbom.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+
+      # Verify exactly as a consumer would, so a broken signature fails the release
+      # here rather than at deploy time.
+      - name: Verify signature and attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cosign verify "$REF" \
+            --certificate-identity "$SIGNER_IDENTITY" \
+            --certificate-oidc-issuer "$OIDC_ISSUER" > evidence/cosign-verify.json
+
+          gh attestation verify "oci://$REF" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --predicate-type https://slsa.dev/provenance/v1 \
+            --format json > evidence/provenance-verify.json
+
+          spdx_version=$(jq -r '.spdxVersion | sub("^SPDX-"; "")' evidence/sbom.spdx.json)
+          gh attestation verify "oci://$REF" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --predicate-type "https://spdx.dev/Document/v$spdx_version" \
+            --format json > evidence/sbom-verify.json
+          echo "signature, provenance and SBOM attestation verified for $REF"
+
+      - name: Assemble release record
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          PROVENANCE_URL: ${{ steps.provenance.outputs.attestation-url }}
+          SBOM_BUNDLE: ${{ steps.sbom.outputs.bundle-path }}
+          SBOM_URL: ${{ steps.sbom.outputs.attestation-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          cp "$PROVENANCE_BUNDLE" evidence/provenance.sigstore.json
+          cp "$SBOM_BUNDLE" evidence/sbom-attestation.sigstore.json
+          jq -n \
+            --arg image "$IMAGE" --arg digest "$DIGEST" --arg tag "$TAG" \
+            --arg commit "$GITHUB_SHA" --arg run "$RUN_URL" --arg actor "$GITHUB_ACTOR" \
+            --arg signer "$SIGNER_IDENTITY" \
+            --arg provenance "$PROVENANCE_URL" --arg sbom "$SBOM_URL" \
+            --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --slurpfile trivy evidence/trivy-image.json \
+            --slurpfile spdx evidence/sbom.spdx.json \
+            '{
+              schema: "healthqueue.release/v1",
+              image: $image, digest: $digest, tag: $tag,
+              reference: ($image + "@" + $digest),
+              commit: $commit, workflow_run: $run, triggered_by: $actor, created_at: $created,
+              signature: { tool: "cosign keyless", identity: $signer },
+              attestations: { slsa_provenance: $provenance, sbom: $sbom },
+              sbom: { format: $spdx[0].spdxVersion, packages: ($spdx[0].packages | length) },
+              vulnerabilities: (
+                [$trivy[0].Results[]?.Vulnerabilities[]?.Severity]
+                | group_by(.) | map({key: ., value: length}) | from_entries
+              )
+            }' > evidence/release.json
+          cat evidence/release.json
+
+      # Each run writes to a new prefix. The container's immutability policy rejects
+      # overwrites and deletes, including by this identity.
+      - name: Upload evidence (WORM storage)
+        run: |
+          prefix="$REPOSITORY/$GITHUB_SHA/run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          az storage blob upload-batch --auth-mode login \
+            --account-name "$EVIDENCE_ACCOUNT" --destination "$EVIDENCE_CONTAINER" \
+            --destination-path "$prefix" --source evidence --only-show-errors -o none
+          echo "EVIDENCE_PREFIX=$prefix" >> "$GITHUB_ENV"
+
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo "### Released \`$REPOSITORY\`"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Image | \`$IMAGE@$DIGEST\` |"
+            echo "| Tag (informational) | \`$TAG\` |"
+            echo "| Vulnerabilities | \`$(jq -c .vulnerabilities evidence/release.json)\` |"
+            echo "| SBOM packages | $(jq .sbom.packages evidence/release.json) |"
+            echo "| Evidence | \`$EVIDENCE_CONTAINER/$EVIDENCE_PREFIX/\` |"
+            echo
+            echo "Verify:"
+            echo '```bash'
+            echo "cosign verify $IMAGE@$DIGEST \\"
+            echo "  --certificate-identity $SIGNER_IDENTITY \\"
+            echo "  --certificate-oidc-issuer $OIDC_ISSUER"
+            echo "gh attestation verify oci://$IMAGE@$DIGEST --repo $GITHUB_REPOSITORY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
