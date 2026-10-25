@@ -108,4 +108,6 @@ A post-apply local plan reported `No changes` (exit 0).
 - **Negative tests of the role delegation.** These would show that the apply identity is refused
   when it tries to assign `Owner`, or any role to a user. The condition is checked by design
   review and by the positive case above only.
-- **The drift job.** It first runs on its daily schedule (05:17 UTC) or by manual dispatch.
+**Since demonstrated.** The drift job was dispatched manually on `main` (run 40170264122).
+`tofu-drift` succeeded as the plan identity, using the `ref:refs/heads/main` federated
+credential. It found no drift and opened no issue.
