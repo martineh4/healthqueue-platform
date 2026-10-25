@@ -7,7 +7,7 @@ KIND_VERSION="v0.27.0"
 ARGOCD_VERSION="v3.0.0"
 TOFU_VERSION="1.13.0"
 COSIGN_VERSION="v2.5.0"
-TRIVY_VERSION="0.61.0"
+TRIVY_VERSION="0.75.0"
 SYFT_VERSION="v1.20.0"
 
 BIN=/usr/local/bin
@@ -26,6 +26,7 @@ curl -fsSL "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/sy
   | sudo tar -xz -C "$BIN" syft
 
 python -m pip install --upgrade pip
+pip install --require-hashes -r app/requirements.lock
 pip install -e "app[dev]"
 
 echo "Tooling installed:"
