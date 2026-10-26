@@ -26,6 +26,16 @@ done
 step "1/5 kind cluster '$CLUSTER'"
 if kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
   echo "exists"
+  # After a Codespace stop/start the node container is stopped, and the API server's host
+  # port can change when it restarts; re-export the kubeconfig either way.
+  node="$CLUSTER-control-plane"
+  if [[ "$(docker inspect -f '{{.State.Running}}' "$node")" != true ]]; then
+    echo "node container stopped (Codespace restarted?); starting it"
+    docker start "$node" >/dev/null
+  fi
+  kind export kubeconfig --name "$CLUSTER" >/dev/null
+  for _ in $(seq 1 60); do kubectl get --raw /readyz >/dev/null 2>&1 && break; sleep 3; done
+  kubectl wait --for condition=Ready node --all --timeout=180s >/dev/null
 else
   kind create cluster --config deploy/kind/cluster.yaml --wait 120s
 fi

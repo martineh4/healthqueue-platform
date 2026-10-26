@@ -4,8 +4,10 @@
 #   build -> Trivy gate -> SBOM -> push (exact scanned image) -> cosign sign (keyless)
 #   -> SLSA provenance + SBOM attestations -> verify all three -> evidence to WORM storage
 #
-# Images are only ever referenced by digest downstream (GitOps, phase 8). The tag is a
-# convenience for humans and is never trusted. See docs/supply-chain-slsa.md.
+#   -> pull request that pins the new digest in the prod overlay (merge = deploy, ADR-0007)
+#
+# Images are only ever referenced by digest downstream. The tag is a convenience for
+# humans and is never trusted. See docs/supply-chain-slsa.md.
 name: Release
 
 on:
@@ -50,6 +52,10 @@ jobs:
     outputs:
       image: ${{ steps.push.outputs.image }}
       digest: ${{ steps.push.outputs.digest }}
+      vulnerabilities: ${{ steps.record.outputs.vulnerabilities }}
+      provenance_url: ${{ steps.provenance.outputs.attestation-url }}
+      sbom_url: ${{ steps.sbom.outputs.attestation-url }}
+      evidence_path: ${{ steps.evidence.outputs.path }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -179,6 +185,7 @@ jobs:
           echo "signature, provenance and SBOM attestation verified for $REF"
 
       - name: Assemble release record
+        id: record
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
           PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
@@ -216,16 +223,19 @@ jobs:
               )
             }' > evidence/release.json
           cat evidence/release.json
+          echo "vulnerabilities=$(jq -c .vulnerabilities evidence/release.json)" >> "$GITHUB_OUTPUT"
 
       # Each run writes to a new prefix. The container's immutability policy rejects
       # overwrites and deletes, including by this identity.
       - name: Upload evidence (WORM storage)
+        id: evidence
         run: |
           prefix="$REPOSITORY/$GITHUB_SHA/run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           az storage blob upload-batch --auth-mode login \
             --account-name "$EVIDENCE_ACCOUNT" --destination "$EVIDENCE_CONTAINER" \
             --destination-path "$prefix" --source evidence --only-show-errors -o none
           echo "EVIDENCE_PREFIX=$prefix" >> "$GITHUB_ENV"
+          echo "path=$EVIDENCE_CONTAINER/$prefix/" >> "$GITHUB_OUTPUT"
 
       - name: Summary
         env:
@@ -250,3 +260,33 @@ jobs:
             echo "gh attestation verify oci://$IMAGE@$DIGEST --repo $GITHUB_REPOSITORY"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Separate job, outside the `release` environment: it holds no Azure or signing
+  # credentials, only enough GitHub permissions to push one branch and open a pull request.
+  promote:
+    name: open-deploy-pr
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # push the deploy/prod-healthqueue-api branch (main stays protected)
+      pull-requests: write # open or update the deploy pull request
+      actions: write # dispatch the required checks on that branch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true # this job pushes; it uploads no artifacts
+
+      - name: Open or update the deploy pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ needs.release.outputs.image }}
+          DIGEST: ${{ needs.release.outputs.digest }}
+          COMMIT: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          VULNS: ${{ needs.release.outputs.vulnerabilities }}
+          PROVENANCE_URL: ${{ needs.release.outputs.provenance_url }}
+          SBOM_URL: ${{ needs.release.outputs.sbom_url }}
+          EVIDENCE_PATH: ${{ needs.release.outputs.evidence_path }}
+        run: bash .github/scripts/open-deploy-pr.sh

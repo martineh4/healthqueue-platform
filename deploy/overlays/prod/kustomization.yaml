@@ -1,6 +1,7 @@
 # Production: what Argo CD syncs to the cluster (phase 7). The image is pinned by digest
-# to a release that release.yml built, scanned, signed and attested. Phase 8 automates
-# the digest bump as a pull request.
+# to a release that release.yml built, scanned, signed and attested. release.yml proposes
+# each new digest as a pull request (ADR-0007); keep the two lines under `images` in this
+# shape, because .github/scripts/open-deploy-pr.sh rewrites them.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

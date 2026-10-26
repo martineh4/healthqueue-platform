@@ -2,8 +2,11 @@ import json
 import logging
 
 from conftest import booking
+from fastapi.testclient import TestClient
 
+from healthqueue import __version__
 from healthqueue.config import Settings
+from healthqueue.main import create_app
 from healthqueue.observability import JsonFormatter
 
 
@@ -23,6 +26,11 @@ def test_readiness_fails_when_store_is_down(client, store, monkeypatch):
     resp = client.get("/readyz")
     assert resp.status_code == 503
     assert resp.json() == {"status": "unavailable"}
+
+
+def test_version_reports_build_commit(store):
+    client = TestClient(create_app(Settings(build_commit="0123abc"), store))
+    assert client.get("/version").json() == {"version": __version__, "commit": "0123abc"}
 
 
 def test_metrics_use_route_templates_not_raw_paths(client):
@@ -63,3 +71,4 @@ def test_settings_from_env(monkeypatch):
     assert settings.clinic_open_hour == 8
     assert settings.slot_minutes == 15
     assert settings.db_path == ":memory:"
+    assert settings.build_commit == "dev"
