@@ -11,6 +11,7 @@ class Settings:
     clinic_close_hour: int = 17  # UTC
     slot_minutes: int = 30
     log_level: str = "INFO"
+    build_commit: str = "dev"  # baked into the image by release.yml
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -20,4 +21,5 @@ class Settings:
             clinic_close_hour=int(os.getenv("HQ_CLINIC_CLOSE_HOUR", cls.clinic_close_hour)),
             slot_minutes=int(os.getenv("HQ_SLOT_MINUTES", cls.slot_minutes)),
             log_level=os.getenv("HQ_LOG_LEVEL", cls.log_level),
+            build_commit=os.getenv("HQ_BUILD_COMMIT", cls.build_commit),
         )

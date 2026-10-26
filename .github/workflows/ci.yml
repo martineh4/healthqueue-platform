@@ -138,6 +138,8 @@ jobs:
             sleep 1
           done
           curl -fsS http://localhost:8000/healthz
+          curl -fsS http://localhost:8000/version | grep -q "\"commit\":\"$GITHUB_SHA\"" \
+            || { echo "/version must report the build commit"; exit 1; }
           test "$(docker exec api id -u)" = "10001" || { echo "container must run as UID 10001"; exit 1; }
           if docker exec api python -m pip --version 2>/dev/null; then
             echo "runtime image must not ship pip"; exit 1

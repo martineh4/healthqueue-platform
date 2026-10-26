@@ -5,6 +5,8 @@ import logging
 from fastapi import APIRouter, Request, Response, status
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from healthqueue import __version__
+
 router = APIRouter(tags=["operations"])
 log = logging.getLogger(__name__)
 
@@ -25,6 +27,12 @@ def readiness(request: Request, response: Response) -> dict[str, str]:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "unavailable"}
     return {"status": "ready"}
+
+
+@router.get("/version")
+def version(request: Request) -> dict[str, str]:
+    """What is running: the app version and the Git commit the image was built from."""
+    return {"version": __version__, "commit": request.app.state.settings.build_commit}
 
 
 @router.get("/metrics", include_in_schema=False)

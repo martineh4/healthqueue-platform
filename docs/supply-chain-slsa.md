@@ -32,7 +32,7 @@ flowchart LR
   Sign --> Attest[SLSA provenance +<br/>SBOM attestations]
   Attest --> Verify[Verify all three<br/>as a consumer would]
   Verify --> Evidence[(WORM evidence<br/>storage)]
-  Verify -.phase 8.-> GitOps[GitOps PR<br/>bumps digest]
+  Verify --> GitOps[Deploy PR pins digest<br/>merge = deploy, ADR-0007]
 ```
 
 Workflows: [`ci.yml`](../.github/workflows/ci.yml) (PR gate),

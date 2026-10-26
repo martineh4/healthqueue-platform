@@ -80,7 +80,7 @@ password be minted on a workstation with Azure access and piped into the Codespa
 
 **Positive**
 
-- **Merge = deploy.** Phase 8's digest-bump PR is the entire release step, and reverting the
+- **Merge = deploy.** The deploy PR that `release.yml` opens (ADR-0007) is the entire release step, and reverting the
   merge commit is the rollback.
 - Every change to the cluster, including Argo CD upgrades and project permissions, has a pull
   request, a review trail and CI checks (`manifests` validates the Applications and AppProjects

@@ -26,6 +26,7 @@ LABEL org.opencontainers.image.title="healthqueue-api" \
       org.opencontainers.image.source="https://github.com/martineh4/healthqueue-platform" \
       org.opencontainers.image.version="${VERSION}"
 ENV PATH="/opt/venv/bin:${PATH}" \
+    HQ_BUILD_COMMIT="${VERSION}" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 RUN python -m pip uninstall --yes pip \

@@ -206,7 +206,11 @@ jobs:
   drift:
     name: tofu-drift
     needs: [validate]
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Manual runs only from main: the deploy-PR bot dispatches this workflow on its branch
+    # just to produce the required checks (ADR-0007), and `prod` rejects other branches.
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

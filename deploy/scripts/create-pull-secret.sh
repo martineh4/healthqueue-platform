@@ -53,8 +53,9 @@ for cmd in kubectl base64; do
 done
 
 if [[ "${1:-}" == "--stdin" ]]; then
-  # Two lines on stdin: password, then expiry (the az query in the usage above).
-  { read -r password; read -r expiry; } < <(tr -d '\r')
+  # Two lines on stdin: password, then expiry (the az query in the usage above). Windows
+  # PowerShell can add a UTF-8 byte order mark and CRLF line endings when it pipes; drop both.
+  { read -r password; read -r expiry; } < <(sed '1s/^\xEF\xBB\xBF//' | tr -d '\r')
 else
   [[ "$DAYS" =~ ^[0-9]+$ ]] && (( DAYS >= 1 && DAYS <= 90 )) || die "DAYS must be 1-90"
   command -v az >/dev/null || die "az not found (or pipe a password in with --stdin)"

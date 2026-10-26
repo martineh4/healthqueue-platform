@@ -65,9 +65,15 @@ Pull failures: [runbook](../docs/runbooks/image-pull-failures.md).
 
 ## Changing the deployed version
 
-Never edit a tag in. The release workflow prints the digest and records it in
-`release-evidence/` along with its signature and attestations. Update `digest:` in
-`overlays/prod/kustomization.yaml` through a pull request (phase 8 automates this):
+Automatic (ADR-0007): after each verified release, `release.yml` opens or updates the pull
+request **"Deploy healthqueue-api <commit> to prod"** from the branch
+`deploy/prod-healthqueue-api`. Its body lists the digest, a compare link against the running
+release, the vulnerability counts and the evidence location. Review it, then merge: Argo CD
+deploys within 3 minutes (**Refresh** in the UI is immediate). To roll back, revert the merge
+commit.
+
+Manual (for example, redeploying an older verified digest): never use a tag. Change `digest:`
+in `overlays/prod/kustomization.yaml` in a pull request:
 
 ```bash
 cd deploy/overlays/prod
