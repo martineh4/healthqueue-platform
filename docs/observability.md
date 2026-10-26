@@ -60,9 +60,6 @@ the burn is real, and a short window, which clears the alert soon after recovery
 | `HealthQueueLatencyBudgetBurn` | Same thresholds, latency SLI | **page** | [slo-burn-rate](runbooks/slo-burn-rate.md) |
 | `HealthQueueLatencyBudgetBurnSlow` | Same thresholds, latency SLI | ticket | [slo-burn-rate](runbooks/slo-burn-rate.md) |
 | `HealthQueueAPIUnavailable` | No successful scrape of the API for 5 minutes | **page** | [api-unavailable](runbooks/api-unavailable.md) |
-| `HealthQueuePullCredentialExpiringSoon` | Registry pull password expires in < 7 days | ticket | [image-pull-failures](runbooks/image-pull-failures.md) |
-| `HealthQueuePullCredentialExpiring` | Expires in < 1 day, or has expired | **page** | [image-pull-failures](runbooks/image-pull-failures.md) |
-| `HealthQueuePullCredentialExpiryUnknown` | No expiry metric for 30 minutes (secret, annotation or exporter missing) | ticket | [image-pull-failures](runbooks/image-pull-failures.md) |
 | `ArgoCDApplicationOutOfSync` | An Argo CD application has not matched `main` for 15 minutes | ticket | [argocd-sync](runbooks/argocd-sync.md) |
 | `ArgoCDApplicationDegraded` | An application's resources Degraded or Missing for 10 minutes | ticket | [argocd-sync](runbooks/argocd-sync.md) |
 
@@ -85,8 +82,6 @@ feeds synthetic metrics through the real rules, and CI's `manifests` check runs
 - a 4× burn sustained for a day opens a ticket but never pages;
 - slow responses page;
 - the API disappearing pages after 5 minutes;
-- a pull credential with 6 days left raises a ticket, not a page;
-- a missing expiry metric raises a ticket;
 - an Argo CD application stuck out of sync raises a ticket.
 
 ## Signals
@@ -96,7 +91,6 @@ feeds synthetic metrics through the real rules, and CI's `manifests` check runs
 | `http_requests_total{method, route, status}` | The API | `route` is the route template (`/v1/appointments/{appointment_id}`), never the raw path: bounded cardinality, no IDs in metrics |
 | `http_request_duration_seconds` | The API | Buckets 25 ms … 5 s, with one at the 300 ms SLO threshold |
 | `healthqueue_appointments_booked_total`, `_booking_conflicts_total`, `_appointments_cancelled_total` | The API | Business events |
-| `healthqueue_credential_expiry_timestamp_seconds` | kube-state-metrics, read from the `acr-pull` Secret's `healthqueue.io/credential-expires-at` annotation | Written by `create-pull-secret.sh`; no secret data is read |
 | `argocd_app_info{sync_status, health_status}` | Argo CD | Delivery health; also used for DORA (phase 11) |
 | Kubernetes object state | kube-state-metrics | Restarts, replicas, image of each pod |
 | Logs | The API, JSON on stdout | Request ID, route template, status, duration. No bodies or query strings, which may hold PHI. Read with `kubectl logs`; a log store is out of scope on kind |
@@ -107,7 +101,6 @@ feeds synthetic metrics through the real rules, and CI's `manifests` check runs
 [`observability/dashboards/healthqueue-slo.json`](../observability/dashboards/healthqueue-slo.json)):
 
 - the SLI and budget left for both SLOs;
-- days until the pull credential expires;
 - burn rate per window, with the paging thresholds marked;
 - requests by route and status, and latency percentiles;
 - business events and container restarts;
@@ -139,4 +132,5 @@ it is never in Git.
 | No log store | Logs shipped to Log Analytics / Loki, queried by request ID |
 | No tracing | OpenTelemetry once the API calls other services (today it calls none) |
 | Grafana admin login | SSO (Entra ID) with viewer and editor groups |
+| The registry pull password's expiry is not monitored: kube-state-metrics cannot read it from a Secret ([ADR-0008](adr/0008-observability-and-slos.md)). `create-pull-secret.sh status` shows the days left, and the bootstrap warns under 7 | No pull password at all: the AKS kubelet identity pulls with `AcrPull` ([ADR-0004](adr/0004-registry-pull-authentication.md)) |
 | `monitoring` namespace has no NetworkPolicies (the API's namespace does) | Default-deny there too, with Prometheus egress allowed to scrape targets and the API server |

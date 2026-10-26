@@ -118,50 +118,6 @@ tests:
               description: Prometheus has not scraped the API successfully for 5 minutes.
               runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/api-unavailable.md
 
-  # The metric's value is a Unix time; promtool's clock starts at 0.
-  - name: a pull credential with 6 days left raises a ticket, not a page
-    interval: 1m
-    input_series:
-      - series: healthqueue_credential_expiry_timestamp_seconds{namespace="healthqueue", secret="acr-pull"}
-        values: 518400x10
-    alert_rule_test:
-      - {eval_time: 5m, alertname: HealthQueuePullCredentialExpiring, exp_alerts: []}
-    promql_expr_test:
-      - expr: ALERTS{alertname="HealthQueuePullCredentialExpiringSoon", alertstate="firing"}
-        eval_time: 5m
-        exp_samples:
-          - labels: ALERTS{alertname="HealthQueuePullCredentialExpiringSoon", alertstate="firing", severity="ticket", namespace="healthqueue", secret="acr-pull"}
-            value: 1
-
-  - name: a fresh 30-day pull credential raises nothing
-    interval: 1m
-    input_series:
-      - series: healthqueue_credential_expiry_timestamp_seconds{namespace="healthqueue", secret="acr-pull"}
-        values: 2592000x60
-    alert_rule_test:
-      - {eval_time: 45m, alertname: HealthQueuePullCredentialExpiringSoon, exp_alerts: []}
-      - {eval_time: 45m, alertname: HealthQueuePullCredentialExpiryUnknown, exp_alerts: []}
-
-  - name: a missing expiry metric raises a ticket after 30 minutes
-    interval: 1m
-    input_series:
-      - series: up{namespace="healthqueue", job="healthqueue-api"}
-        values: 1x60
-    alert_rule_test:
-      - {eval_time: 20m, alertname: HealthQueuePullCredentialExpiryUnknown, exp_alerts: []}
-      - eval_time: 40m
-        alertname: HealthQueuePullCredentialExpiryUnknown
-        exp_alerts:
-          # absent() carries over the selector's equality labels.
-          - exp_labels: {severity: ticket, namespace: healthqueue, secret: acr-pull}
-            exp_annotations:
-              summary: Registry pull credential expiry is not being reported
-              description: >-
-                No expiry metric for healthqueue/acr-pull. Either the secret or its
-                healthqueue.io/credential-expires-at annotation is missing, or kube-state-metrics
-                is not exporting it, so an upcoming expiry would go unnoticed.
-              runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/image-pull-failures.md
-
   - name: an application stuck out of sync raises a ticket after 15 minutes
     interval: 1m
     input_series:

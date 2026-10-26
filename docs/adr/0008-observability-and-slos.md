@@ -1,6 +1,6 @@
 # ADR-0008: Observability stack and SLO-based alerting
 
-- **Status:** Accepted
+- **Status:** Accepted; amended 2026-10-26 after live testing (pull credential expiry, below)
 - **Date:** 2026-10-26
 - **Deciders:** Platform engineering; informed: CTO
 - **Related:** [observability and SLOs](../observability.md), [ADR-0005](0005-sqlite-single-replica-data-store.md),
@@ -72,20 +72,41 @@ allows `ServiceMonitor` and `PrometheusRule`, and nothing else new.
   Each alert has a runbook link.
 - **Operations alerts:**
   - API unavailable for 5 minutes;
-  - pull credential expiring in under 7 days (ticket) or 1 day (page);
-  - pull credential expiry not reported (ticket);
   - Argo CD application out of sync for 15 minutes, or degraded for 10 minutes.
 - **Tests:** `observability/tests/slo.test.yaml` runs the real rules against synthetic
   series with `promtool test rules` in CI. During development, a deliberately wrong threshold
   made the tests fail, so they do catch regressions.
 
-### Pull credential expiry without reading the secret
+### Pull credential expiry: not monitored (amended after live testing)
 
-`create-pull-secret.sh` already writes the expiry into the Secret's
+The original decision was to alert on the registry pull password's expiry without reading the
+Secret. `create-pull-secret.sh` writes the expiry into the Secret's
 `healthqueue.io/credential-expires-at` annotation. kube-state-metrics' custom-resource-state
-feature exports that annotation as `healthqueue_credential_expiry_timestamp_seconds`. Only
-metadata is used, and no new workload or permission is added: kube-state-metrics already
-watches Secrets.
+feature was to export it as `healthqueue_credential_expiry_timestamp_seconds`, with three alerts
+on it: under 7 days (ticket), under 1 day (page), and metric missing (ticket).
+
+**Live testing found that this cannot work.** kube-state-metrics v2.20.0 rejected the
+configuration at startup:
+
+```
+"failed to resolve GVK" err="group is required in the defined GVK /v1, Kind=Secret"
+```
+
+Custom-resource-state metrics only work for resources with an API group, in practice CRDs.
+Secret is in the core group, so the metric never existed. CI could not see this: the chart
+renders, the objects pass schema validation, and the promtool tests feed the metric in
+synthetically. The `HealthQueuePullCredentialExpiryUnknown` safety-net alert did go pending
+on the live cluster, as designed.
+
+**Decision:** remove the metric, its dashboard panel and all three alerts.
+
+- **On kind:** `create-pull-secret.sh status` reports the days left from the same annotation,
+  and `bootstrap-cluster.sh` runs it on every start and warns under 7 days.
+- **In production:** nothing is needed. On AKS the kubelet's managed identity pulls with
+  `AcrPull`, so there is no pull secret and no password to expire (ADR-0004).
+
+Making the kind-only credential observable would mean a CRD or an exporter (see Alternatives),
+which is more machinery than it is worth.
 
 ### Secrets
 
@@ -99,7 +120,6 @@ sync.
 **Positive**
 
 - Pages mean a real, sustained threat to the SLO, and each one links to a runbook.
-- The pull credential no longer expires silently.
 - Alert logic has unit tests, so a broken threshold fails the pull request instead of the
   next incident.
 - Monitoring changes follow the same path as everything else: pull request, CI, merge, then
@@ -119,6 +139,10 @@ sync.
   Production uses SSO.
 - **No NetworkPolicies in `monitoring`.** Its pods can reach anything. The API's namespace is
   protected and admits only `monitoring`.
+- **The kind pull password can expire unannounced** if the cluster runs for weeks without a
+  bootstrap. Running pods keep working (the image is cached on the node); the next pull fails
+  and the [image-pull-failures runbook](../runbooks/image-pull-failures.md) covers recovery.
+  Production has no such password.
 - **Low traffic exaggerates ratios.** With a handful of requests, one 5xx can exceed the
   14.4× threshold. Production would add a minimum-traffic condition, or use synthetic traffic
   to keep the denominator meaningful.
@@ -131,7 +155,9 @@ sync.
 | Argo CD Helm source instead of kustomize `helmCharts` | CI would need a separate `helm template` invocation, and the "CI validates exactly what Argo CD applies" property would depend on keeping two renderings in sync. |
 | Sloth or Pyrra to generate SLO rules | Adds a generator (and, for Pyrra, an operator) to explain and pin. The generated rules are about 30 lines of repetitive PromQL, written out and tested directly here. |
 | Threshold alerts (error rate > 1% for 5m) | Page on short blips that barely touch the budget, and miss slow burns that exhaust it. |
-| A CronJob to check the pull secret's expiry | Needs an image, RBAC to read the Secret (including its data), and a way to raise alerts. kube-state-metrics reads only the annotation. |
+| kube-state-metrics custom-resource-state on the Secret's annotation | Chosen first, then removed: kube-state-metrics cannot target core-group resources such as Secrets (found in live testing, above). |
+| A small CRD holding the expiry, for kube-state-metrics to export | Works, but adds a CRD, RBAC and a second object for the script to keep in step, all for a kind-only credential that production does not have. |
+| A CronJob or exporter that reads the Secret | Needs an image, RBAC to read the Secret (including its data), and a way to publish the result. Same objection. |
 
 ## Revisit when
 

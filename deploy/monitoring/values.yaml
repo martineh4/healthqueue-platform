@@ -156,27 +156,3 @@ kube-state-metrics:
   image:
     tag: v2.20.0
     sha: sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b
-  # Exposes the registry pull secret's expiry as a number, so Prometheus can alert before
-  # it lapses. create-pull-secret.sh writes the RFC 3339 expiry into this annotation.
-  customResourceState:
-    enabled: true
-    config:
-      kind: CustomResourceStateMetrics
-      spec:
-        resources:
-          - groupVersionKind:
-              group: ""
-              version: v1
-              kind: Secret
-            metricNamePrefix: healthqueue
-            labelsFromPath:
-              namespace: [metadata, namespace]
-              secret: [metadata, name]
-            metrics:
-              - name: credential_expiry_timestamp_seconds
-                help: Unix time at which the credential in this Secret expires (from the healthqueue.io/credential-expires-at annotation).
-                each:
-                  type: Gauge
-                  gauge:
-                    path: [metadata, annotations]
-                    valueFrom: [healthqueue.io/credential-expires-at]
