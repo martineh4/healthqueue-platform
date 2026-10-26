@@ -1,6 +1,6 @@
 """Metrics and structured logging.
 
-SLI design notes (see docs/observability-slo.md):
+SLI design notes (see docs/observability.md):
 - Requests are labelled by *route template* (e.g. /v1/appointments/{appointment_id}),
   never the raw path, to keep label cardinality bounded and avoid leaking IDs.
 - Latency buckets bracket the 300 ms latency SLO threshold so the SLI can be

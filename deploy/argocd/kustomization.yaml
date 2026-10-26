@@ -7,6 +7,8 @@ resources:
   - projects/default.yaml
   - projects/platform.yaml
   - projects/healthqueue.yaml
+  - projects/monitoring.yaml
   - apps/argocd.yaml
   - apps/healthqueue-api.yaml
+  - apps/monitoring.yaml
   - root.yaml

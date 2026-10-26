@@ -13,6 +13,17 @@ resources:
   # argoproj/argo-cd v3.5.4
   - https://raw.githubusercontent.com/argoproj/argo-cd/d6d5b248ce00e1a2c512068002a93d3319767087/manifests/install.yaml
 
+# deploy/monitoring renders a Helm chart through kustomize; CI renders it the same way.
+patches:
+  - target:
+      kind: ConfigMap
+      name: argocd-cm
+    patch: |-
+      - op: add
+        path: /data
+        value:
+          kustomize.buildOptions: --enable-helm
+
 images:
   - name: quay.io/argoproj/argocd
     digest: sha256:49dff79439bb38b1b942b19a113fe1fec7e6b6c671ddf9fe6a4a7c46bde0b77b # v3.5.4

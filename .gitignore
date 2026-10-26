@@ -33,3 +33,7 @@ Thumbs.db
 .dockerconfigjson
 *dockerconfig*.json
 *pull-secret*.yaml
+
+# Rendered manifests and the verified Helm chart cache (CI and local renders)
+rendered/
+deploy/monitoring/charts/

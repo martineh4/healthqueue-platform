@@ -1,0 +1,182 @@
+# kube-prometheus-stack values for the kind cluster (ADR-0008).
+#
+# Every image is pinned by digest (`sha`), like every other image in the repository; CI
+# renders this chart and fails on any image without one. To upgrade: bump the chart version
+# in kustomization.yaml, then update each tag and digest here in the same pull request.
+
+fullnameOverride: kps
+
+crds:
+  enabled: true
+
+## Scrape targets that do not exist or are unreachable on kind ------------------------------
+# kind binds etcd, the scheduler and the controller manager to localhost inside the node,
+# so their ServiceMonitors would only produce permanent TargetDown alerts. kube-proxy and
+# CoreDNS are left out to keep the stack inside the `monitoring` namespace (no Services
+# created in kube-system).
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+coreDns:
+  enabled: false
+windowsMonitoring:
+  enabled: false
+# node-exporter needs host networking, host PID and host paths (privileged Pod Security).
+# The "node" here is a container inside a Codespace, so host metrics add little.
+nodeExporter:
+  enabled: false
+
+defaultRules:
+  create: true
+  rules:
+    etcd: false
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    node: false
+    nodeExporterAlerting: false
+    nodeExporterRecording: false
+    windows: false
+
+## Prometheus operator ------------------------------------------------------------------------
+prometheusOperator:
+  # The admission webhook only validates PrometheusRules at apply time; promtool does that
+  # in CI before merge. Disabling it also removes two images and a certificate Job.
+  admissionWebhooks:
+    enabled: false
+  tls:
+    enabled: false
+  image:
+    tag: v0.94.1
+    sha: 7c88d4e7bae63bd8d0f8da986054337c23b4472fa8d3c6817f5bc4b8407a2d6a
+  prometheusConfigReloader:
+    image:
+      tag: v0.94.1
+      sha: 06b52bd4dbe3ed6dd5905aadaf8b9987d9da4c31d37bb86deaadae68cee2d26b
+  # Passed to the operator as a default even though no Thanos sidecar is configured; pinned
+  # so that enabling one later cannot pull an unpinned image.
+  thanosImage:
+    tag: v0.42.4
+    sha: b567818fe608067eb0f1d7c2c4fe361e7ad83c8a256234c97685f1d0bf670cc8
+
+## Prometheus -------------------------------------------------------------------------------
+prometheus:
+  prometheusSpec:
+    image:
+      tag: v3.15.0-distroless
+      sha: b2a413d5a03ea6a76782a508d1c7947440bba3b973931a25676e278431891b01
+    # Select every ServiceMonitor and PrometheusRule in the cluster, not only those carrying
+    # this release's label: the SLO rules live with the application (observability/).
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    # The SLO window is 30 days. Storage is an emptyDir on kind, so history is lost when the
+    # pod restarts; production uses a persistent volume (ADR-0008).
+    retention: 30d
+    retentionSize: 4GB
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+
+## Alertmanager -----------------------------------------------------------------------------
+alertmanager:
+  alertmanagerSpec:
+    image:
+      tag: v0.34.1
+      sha: e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
+  # Routing by severity. The receivers are placeholders on kind: alerts are visible in the
+  # Alertmanager and Prometheus UIs. Production replaces them with the on-call pager
+  # (severity=page) and the team's ticket queue (severity=ticket); see docs/observability.md.
+  config:
+    route:
+      receiver: "null"
+      group_by: [alertname, slo, namespace]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - receiver: "null"
+          matchers: ['alertname = "Watchdog"']
+        - receiver: page
+          matchers: ['severity = "page"']
+          repeat_interval: 1h
+        - receiver: ticket
+          matchers: ['severity =~ "ticket|warning"']
+    receivers:
+      - name: "null"
+      - name: page
+      - name: ticket
+    inhibit_rules:
+      # A paging burn-rate alert makes the ticket-level one for the same SLO redundant.
+      - source_matchers: ['severity = "page"']
+        target_matchers: ['severity = "ticket"']
+        equal: [slo]
+
+## Grafana ----------------------------------------------------------------------------------
+grafana:
+  image:
+    tag: 13.2.3-distroless
+    sha: 202e5d5b3f8499e70ccac7991eea6d7da72d2790eb2e0597e7987acf724e7180
+  # The admin password is never in Git: bootstrap-cluster.sh creates this Secret with a
+  # random password (Argo CD does not manage it), the same pattern as the pull secret.
+  admin:
+    existingSecret: grafana-admin
+  testFramework:
+    enabled: false
+  initChownData:
+    enabled: false
+  # Dashboards are provisioned from ConfigMaps labelled grafana_dashboard=1 in any
+  # namespace, so the HealthQueue SLO dashboard ships with the application.
+  sidecar:
+    image:
+      tag: 2.14.1
+      sha: 092dbe0c335fba9af414a27630ca68f34df6185784fa847d9954187e69dbfdd7
+    dashboards:
+      searchNamespace: ALL
+  grafana.ini:
+    analytics:
+      check_for_updates: false
+      reporting_enabled: false
+    users:
+      allow_sign_up: false
+
+## kube-state-metrics -----------------------------------------------------------------------
+kube-state-metrics:
+  image:
+    tag: v2.20.0
+    sha: sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b
+  # Exposes the registry pull secret's expiry as a number, so Prometheus can alert before
+  # it lapses. create-pull-secret.sh writes the RFC 3339 expiry into this annotation.
+  customResourceState:
+    enabled: true
+    config:
+      kind: CustomResourceStateMetrics
+      spec:
+        resources:
+          - groupVersionKind:
+              group: ""
+              version: v1
+              kind: Secret
+            metricNamePrefix: healthqueue
+            labelsFromPath:
+              namespace: [metadata, namespace]
+              secret: [metadata, name]
+            metrics:
+              - name: credential_expiry_timestamp_seconds
+                help: Unix time at which the credential in this Secret expires (from the healthqueue.io/credential-expires-at annotation).
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [metadata, annotations]
+                    valueFrom: [healthqueue.io/credential-expires-at]

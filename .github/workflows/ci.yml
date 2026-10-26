@@ -187,6 +187,14 @@ jobs:
       # Matches the kind node image used for the cluster (phase 7).
       KUBERNETES_VERSION: 1.37.0
       CRDS_CATALOG_SHA: 501527ab9c40c827144c8f45945b25a023e344ce
+      # Helm matches the version bundled with Argo CD v3.5.4, which renders deploy/monitoring.
+      HELM_VERSION: v4.2.1
+      HELM_SHA256: 479dca836e5b45e8bd222400c5591b0e3a647378f03ff96597180db97c17fdae
+      # promtool matches the Prometheus image in deploy/monitoring/values.yaml.
+      PROMETHEUS_VERSION: 3.15.0
+      PROMETHEUS_SHA256: 2a542df32eac02ee17b9d844fb2aa1de00dafa5476579ba8a3ba862e9d572ea0
+      KPS_CHART_VERSION: 92.3.0
+      KPS_CHART_SHA256: 48399b911fa91b353e0c3d5e32c1cb7a67a168566549723553154ffd7be5d1fa
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -200,13 +208,28 @@ jobs:
           echo "$KUSTOMIZE_SHA256  kustomize.tgz" | sha256sum --check --strict
           curl -fsSLo kubeconform.tgz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
           echo "$KUBECONFORM_SHA256  kubeconform.tgz" | sha256sum --check --strict
+          curl -fsSLo helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "$HELM_SHA256  helm.tgz" | sha256sum --check --strict
+          curl -fsSLo prometheus.tgz "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+          echo "$PROMETHEUS_SHA256  prometheus.tgz" | sha256sum --check --strict
           tar -xzf kustomize.tgz -C "$RUNNER_TEMP/bin" kustomize
           tar -xzf kubeconform.tgz -C "$RUNNER_TEMP/bin" kubeconform
+          tar -xzf helm.tgz -C "$RUNNER_TEMP/bin" --strip-components=1 linux-amd64/helm
+          tar -xzf prometheus.tgz -C "$RUNNER_TEMP/bin" --strip-components=1 "prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
+      # The chart archive is verified here and unpacked where kustomize looks for it, so the
+      # render uses exactly these bytes (kustomize skips the download when the chart exists).
+      - name: Fetch and verify the kube-prometheus-stack chart
+        run: |
+          curl -fsSLo kps.tgz "https://github.com/prometheus-community/helm-charts/releases/download/kube-prometheus-stack-${KPS_CHART_VERSION}/kube-prometheus-stack-${KPS_CHART_VERSION}.tgz"
+          echo "$KPS_CHART_SHA256  kps.tgz" | sha256sum --check --strict
+          mkdir -p "deploy/monitoring/charts/kube-prometheus-stack-${KPS_CHART_VERSION}"
+          tar -xzf kps.tgz -C "deploy/monitoring/charts/kube-prometheus-stack-${KPS_CHART_VERSION}"
+
       # rendered/app/ is ours and gets the full Trivy policy scan. Argo CD's upstream install
-      # is validated and digest-checked but not policy-scanned: its controllers need
-      # cluster-wide RBAC by design (ADR-0006).
+      # and the monitoring chart are validated and digest-checked but not policy-scanned:
+      # their controllers need cluster-wide RBAC by design (ADR-0006, ADR-0008).
       - name: Render kustomizations
         run: |
           mkdir -p rendered/app
@@ -215,6 +238,7 @@ jobs:
           done
           kustomize build deploy/argocd > rendered/gitops.yaml
           kustomize build deploy/argocd/install > rendered/argocd-install.yaml
+          kustomize build --enable-helm deploy/monitoring > rendered/monitoring.yaml
           for f in rendered/app/*.yaml rendered/*.yaml; do
             echo "$f: $(grep -c '^kind:' "$f") objects"
           done
@@ -230,13 +254,28 @@ jobs:
             rendered/app/*.yaml rendered/*.yaml
 
       # Deploy-by-digest is a supply-chain control (docs/supply-chain-slsa.md): a tag can be
-      # repointed, a digest cannot. This covers Argo CD's own images too.
+      # repointed, a digest cannot. This covers Argo CD's and the monitoring stack's images,
+      # including images passed as operator flags. (`image:` with no value is a field name
+      # inside a CRD schema, not an image.)
       - name: Require digest-pinned images
         run: |
-          if grep -nE '^\s*image:' rendered/app/*.yaml rendered/*.yaml | grep -v '@sha256:[0-9a-f]\{64\}'; then
+          if grep -nE '^\s*image:\s*\S|^\s*- --[a-z-]*(image|reloader)=' rendered/app/*.yaml rendered/*.yaml \
+              | grep -v '@sha256:[0-9a-f]\{64\}'; then
             echo "::error::every image must be pinned by @sha256 digest"; exit 1
           fi
-          echo "all images pinned by digest"
+          echo "all images pinned by digest:"
+          grep -hoE '[a-z0-9.-]+/[a-z0-9./_-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' rendered/app/*.yaml rendered/*.yaml | sort -u
+
+      # Alerting rules are code: lint them, then run the unit tests that prove each alert
+      # fires (and stays quiet) for the scenarios in observability/tests/slo.test.yaml.
+      # yq ships with the GitHub-hosted runner image.
+      - name: Test alerting rules (promtool)
+        run: |
+          mkdir -p rendered/rules
+          yq '.spec' observability/prometheusrule.yaml > rendered/rules/healthqueue-api-slo.yaml
+          yq '.spec' deploy/monitoring/platform-rules.yaml > rendered/rules/platform-gitops.yaml
+          promtool check rules rendered/rules/*.yaml
+          promtool test rules observability/tests/slo.test.yaml
 
       - name: Trivy misconfiguration scan (rendered manifests)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

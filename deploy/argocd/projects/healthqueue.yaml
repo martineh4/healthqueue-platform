@@ -31,3 +31,8 @@ spec:
       kind: PersistentVolumeClaim
     - group: networking.k8s.io
       kind: NetworkPolicy
+    # The service's own scrape config and SLO rules (observability/, ADR-0008).
+    - group: monitoring.coreos.com
+      kind: ServiceMonitor
+    - group: monitoring.coreos.com
+      kind: PrometheusRule

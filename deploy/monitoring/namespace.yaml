@@ -1,0 +1,12 @@
+# Prometheus, Alertmanager, Grafana and kube-state-metrics. Enforced at `baseline`, with
+# `restricted` violations reported (warn/audit) so they stay visible. The application
+# namespace enforces `restricted`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: v1.37
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

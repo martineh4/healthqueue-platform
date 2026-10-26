@@ -1,0 +1,18 @@
+# Prometheus scrapes the API's /metrics through its Service. deploy/base's NetworkPolicy
+# admits only the `monitoring` namespace on the http port.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: healthqueue-api
+  annotations:
+    # The CRD arrives with the monitoring stack; Argo CD retries until it exists.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: healthqueue-api
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

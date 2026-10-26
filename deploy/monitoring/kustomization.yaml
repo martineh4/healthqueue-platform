@@ -1,0 +1,29 @@
+# Monitoring stack (ADR-0008): kube-prometheus-stack rendered by kustomize, so CI validates
+# exactly what Argo CD applies (Argo CD runs kustomize with --enable-helm; see
+# deploy/argocd/install). The chart is pinned by version; CI also verifies the chart
+# archive's SHA-256 before rendering it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - argocd-servicemonitors.yaml
+  - platform-rules.yaml
+
+helmCharts:
+  - name: kube-prometheus-stack
+    repo: https://prometheus-community.github.io/helm-charts
+    version: 92.3.0
+    releaseName: kps
+    namespace: monitoring
+    includeCRDs: true
+    valuesFile: values.yaml
+
+patches:
+  # Deleting a CRD deletes every object of that kind. Never let a sync remove them.
+  - target:
+      kind: CustomResourceDefinition
+    patch: |-
+      - op: add
+        path: /metadata/annotations/argocd.argoproj.io~1sync-options
+        value: Prune=false,Delete=false

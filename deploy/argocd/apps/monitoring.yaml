@@ -1,0 +1,31 @@
+# Prometheus, Alertmanager, Grafana and kube-state-metrics (ADR-0008), rendered from
+# deploy/monitoring (kustomize + Helm chart pinned by version, images pinned by digest).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  # No resources finalizer: deleting the Application leaves monitoring running.
+spec:
+  project: monitoring
+  source:
+    repoURL: https://github.com/martineh4/healthqueue-platform.git
+    targetRevision: main
+    path: deploy/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  revisionHistoryLimit: 10
+  syncPolicy:
+    automated:
+      prune: true # CRDs are excluded: they carry Prune=false,Delete=false
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true # the Prometheus CRDs exceed the client-side apply annotation limit
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
