@@ -68,8 +68,9 @@ Pull failures: [runbook](../docs/runbooks/image-pull-failures.md).
 Automatic (ADR-0007): after each verified release, `release.yml` opens or updates the pull
 request **"Deploy healthqueue-api <commit> to prod"** from the branch
 `deploy/prod-healthqueue-api`. Its body lists the digest, a compare link against the running
-release, the vulnerability counts and the evidence location. Review it, then merge: Argo CD
-deploys within 3 minutes (**Refresh** in the UI is immediate). To roll back, revert the merge
+release, the vulnerability counts and the evidence location. Click **Approve workflows to
+run** (CI on bot pull requests waits for a maintainer), review it, and merge once the checks
+pass: Argo CD deploys within 3 minutes (**Refresh** in the UI is immediate). To roll back, revert the merge
 commit.
 
 Manual (for example, redeploying an older verified digest): never use a tag. Change `digest:`

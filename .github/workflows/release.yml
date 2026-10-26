@@ -271,7 +271,6 @@ jobs:
     permissions:
       contents: write # push the deploy/prod-healthqueue-api branch (main stays protected)
       pull-requests: write # open or update the deploy pull request
-      actions: write # dispatch the required checks on that branch
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
