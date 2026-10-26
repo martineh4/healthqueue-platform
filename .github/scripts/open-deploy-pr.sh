@@ -6,9 +6,9 @@
 # updates it if one is already open (a newer release replaces an unmerged older one).
 # Merging the pull request is the deployment: Argo CD syncs main.
 #
-# Pull requests opened with GITHUB_TOKEN do not trigger workflows, so the required checks
-# are started explicitly with workflow_dispatch on the branch (the one event GITHUB_TOKEN
-# may trigger). Their check runs attach to the branch head and gate the merge as usual.
+# GitHub holds the pull request's CI runs for approval because GITHUB_TOKEN opened it: a
+# maintainer clicks "Approve workflows to run", the required checks run, then the
+# maintainer merges (ADR-0007).
 #
 # Env: IMAGE DIGEST COMMIT RUN_URL VULNS PROVENANCE_URL SBOM_URL EVIDENCE_PATH
 #      SIGNER_IDENTITY OIDC_ISSUER GITHUB_REPOSITORY GH_TOKEN
@@ -16,7 +16,6 @@ set -euo pipefail
 
 OVERLAY=deploy/overlays/prod/kustomization.yaml
 BRANCH=deploy/prod-healthqueue-api
-CHECK_WORKFLOWS=(ci.yml infra.yml)
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -60,6 +59,9 @@ cat > "$body" <<EOF
 Deploys a verified release of \`healthqueue-api\` to **prod**. Merging this pull request is the
 deployment: Argo CD syncs \`main\` within 3 minutes (or press **Refresh** in the UI).
 
+**To deploy:** click **Approve workflows to run** below (bot pull requests wait for a
+maintainer before CI runs), wait for the required checks, then merge.
+
 | | |
 |---|---|
 | Built from | [\`$short\`]($server/$GITHUB_REPOSITORY/commit/$COMMIT) ([changes since the running release]($server/$GITHUB_REPOSITORY/compare/$previous_commit...$COMMIT)) |
@@ -93,8 +95,4 @@ if [[ -n "$number" ]]; then
 else
   gh pr create --base main --head "$BRANCH" --title "$title" --body-file "$body" --label deploy
 fi
-
-for wf in "${CHECK_WORKFLOWS[@]}"; do
-  gh workflow run "$wf" --ref "$BRANCH"
-done
-echo "required checks dispatched on $BRANCH: ${CHECK_WORKFLOWS[*]}"
+echo "CI on $BRANCH is waiting for a maintainer to approve it on the pull request"

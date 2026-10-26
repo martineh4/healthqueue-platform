@@ -47,19 +47,24 @@ verification job succeeds.
 - **Not auto-merged.** With one maintainer, the merge button is the deliberate human
   approval of a production change.
 
-### Making the required checks run
+### Approving the pull request's CI runs
 
-GitHub does not start workflows for events caused by the job's `GITHUB_TOKEN`; this prevents
-recursive runs. A bot pull request would therefore never get its required checks and could
-never be merged. GitHub makes one exception: `GITHUB_TOKEN` may trigger `workflow_dispatch`.
-The job therefore dispatches `ci.yml` and `infra.yml` on the bot branch.
+A pull request opened with the job's `GITHUB_TOKEN` gets its `pull_request` workflow runs,
+but GitHub holds them as **"action required"** until a maintainer clicks **Approve workflows
+to run** on the pull request. Then the required checks run as on any other pull request.
+Every push to the bot branch (a newer release) needs the approval again.
 
-Branch protection evaluates check runs on the head commit, so these runs gate the merge
-exactly as `pull_request` runs would. In `infra.yml`, `tofu-plan` is skipped (it only runs
-for pull requests, and a skipped job satisfies a required check). The drift job now runs on
-manual dispatch only from `main`.
+The deploy procedure is therefore: **approve workflows → checks pass → merge.** The approval
+is also a deliberate human decision before bot-authored changes run in CI.
 
-Opening a pull request with `GITHUB_TOKEN` also needs the repository setting **"Allow GitHub
+*What did not work (2026-10-26):* dispatching `ci.yml` and `infra.yml` on the bot branch with
+`workflow_dispatch`, the one event `GITHUB_TOKEN` may trigger. The runs passed on the pull
+request's head commit, but GitHub does not count `workflow_dispatch` results toward a pull
+request's required checks, and the pull request stayed blocked. That approach was removed.
+`infra.yml`'s drift job still runs on manual dispatch only from `main`, because `prod` rejects
+other branches.
+
+Opening a pull request with `GITHUB_TOKEN` needs the repository setting **"Allow GitHub
 Actions to create and approve pull requests"**. That setting also lets workflows approve
 pull requests. It has no effect today, because branch protection requires zero approvals
 (one maintainer).
@@ -84,17 +89,17 @@ pull requests. It has no effect today, because branch protection requires zero a
   second maintainer joins and branch protection requires a review, a workflow could approve
   its own pull request. At that point, switch to a GitHub App token (below) and turn the
   setting off.
-- **Dispatched checks show as "workflow_dispatch" runs,** not "pull_request" runs, in the
-  Actions tab. They are attached to the pull request's head commit and listed in its checks.
+- **One extra click per deploy:** approving the held CI runs. A GitHub App token removes it.
 - **Deploy pull requests can go stale.** Strict branch protection requires the branch to be
-  up to date with `main`. If `main` moves, use **Update branch**. That runs the checks
-  normally, because the update is made by a person.
+  up to date with `main`. If `main` moves, use **Update branch** on the pull request, or let
+  the next release rebuild the branch from `main`.
 
 ## Alternatives considered
 
 | Option | Why rejected (for now) |
 |---|---|
-| GitHub App token (`actions/create-github-app-token`) | **The production choice.** It gives the bot its own identity, pull requests that trigger CI normally, and no need for the "create and approve" setting. It needs an App registration and a private key stored as a secret. Adopt it when a second maintainer or required reviews arrive. |
+| GitHub App token (`actions/create-github-app-token`) | **The production choice.** It gives the bot its own identity, pull requests whose CI runs without an approval click, and no need for the "create and approve" setting. It needs an App registration and a private key stored as a secret. Deferred by the maintainer (one extra click per deploy is acceptable for now). Adopt it when a second maintainer or required reviews arrive. |
+| `workflow_dispatch` the required checks on the bot branch | Tried. GitHub does not count dispatched runs toward the pull request's required checks. |
 | Personal access token | Ties production changes to one person's account and holds a long-lived secret. Fine-grained tokens still expire and need manual rotation. |
 | Argo CD Image Updater | Changes production without a pull request, failing requirement 1 (also rejected in ADR-0006). |
 | Commit the bump directly to `main` | Bypasses branch protection and review entirely. |

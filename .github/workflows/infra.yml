@@ -206,8 +206,8 @@ jobs:
   drift:
     name: tofu-drift
     needs: [validate]
-    # Manual runs only from main: the deploy-PR bot dispatches this workflow on its branch
-    # just to produce the required checks (ADR-0007), and `prod` rejects other branches.
+    # Manual runs only from main: `prod` rejects deployments from any other branch, so a
+    # dispatch on a feature branch would fail here instead of being skipped.
     if: >-
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
