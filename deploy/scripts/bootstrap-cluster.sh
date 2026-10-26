@@ -98,7 +98,7 @@ done
 target=$(git ls-remote origin refs/heads/main | cut -f1)
 [[ -n "$target" ]] || die "could not read origin/main"
 echo "main is at ${target::12}"
-kubectl -n argocd annotate application root healthqueue-api \
+kubectl -n argocd annotate application root healthqueue-api monitoring \
   argocd.argoproj.io/refresh=hard --overwrite >/dev/null
 kubectl -n argocd wait application/healthqueue-api \
   --for=jsonpath='{.status.sync.revision}'="$target" --timeout=600s
@@ -107,7 +107,12 @@ kubectl -n argocd wait application/healthqueue-api \
 kubectl -n healthqueue rollout status deployment/healthqueue-api --timeout=600s
 kubectl -n argocd wait application/healthqueue-api \
   --for=jsonpath='{.status.health.status}'=Healthy --timeout=600s
-# The monitoring stack's first install pulls several images; give it longer.
+# The monitoring stack's first install pulls several images; give it longer. Wait for the
+# sync first: a resumed cluster reports the old resources as Healthy before it has applied main.
+kubectl -n argocd wait application/monitoring \
+  --for=jsonpath='{.status.sync.revision}'="$target" --timeout=900s
+kubectl -n argocd wait application/monitoring \
+  --for=jsonpath='{.status.sync.status}'=Synced --timeout=900s
 kubectl -n argocd wait application/monitoring \
   --for=jsonpath='{.status.health.status}'=Healthy --timeout=900s
 
