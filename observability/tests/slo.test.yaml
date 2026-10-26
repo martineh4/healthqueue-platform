@@ -2,6 +2,10 @@
 # groups from the PrometheusRule objects into rendered/rules/ and runs:
 #   promtool test rules observability/tests/slo.test.yaml
 # Synthetic series use 1-minute steps; "a+bxN" is N steps starting at a, increasing by b.
+#
+# Alerts whose text includes a computed value ($value) are checked through the ALERTS series
+# (labels only): Prometheus offsets each group's evaluation time by a hash that includes the
+# rule file's path, so the exact value differs slightly between machines.
 rule_files:
   - ../../rendered/rules/healthqueue-api-slo.yaml
   - ../../rendered/rules/platform-gitops.yaml
@@ -47,27 +51,41 @@ tests:
           - labels: slo:sli_error:ratio_rate5m{service="healthqueue-api", slo="availability"}
             value: 0
 
-  # Outage: from minute 60, half of all requests fail (100x the budget).
+  # Outage after 6 healthy hours: from minute 360, half of all requests fail. Only the 14.4x
+  # branch (1h and 5m windows) can fire: 10 minutes in, the 6h window is still under 6x.
   - name: a fast availability burn pages within minutes
     interval: 1m
     input_series:
       - series: http_requests_total{namespace="healthqueue", job="healthqueue-api", route="/v1/appointments", method="POST", status="201"}
-        values: 0+600x120
+        values: 0+600x400
       - series: http_requests_total{namespace="healthqueue", job="healthqueue-api", route="/v1/appointments", method="POST", status="500"}
-        values: 0x60 0+600x60
+        values: 0x360 0+600x40
     alert_rule_test:
-      # 1 minute in: the 1h window has not crossed 14.4x the budget yet.
-      - {eval_time: 61m, alertname: HealthQueueAvailabilityBudgetBurn, exp_alerts: []}
-      - eval_time: 70m
-        alertname: HealthQueueAvailabilityBudgetBurn
-        exp_alerts:
-          - exp_labels: {severity: page, service: healthqueue-api, slo: availability}
-            exp_annotations:
-              summary: HealthQueue API is burning its availability error budget fast
-              description: >-
-                13.04% of /v1 requests are failing the availability SLI.
-                At this rate the 30-day error budget runs out within days.
-              runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/slo-burn-rate.md
+      - {eval_time: 361m, alertname: HealthQueueAvailabilityBudgetBurn, exp_alerts: []}
+    promql_expr_test:
+      - expr: ALERTS{alertname="HealthQueueAvailabilityBudgetBurn", alertstate="firing"}
+        eval_time: 370m
+        exp_samples:
+          - labels: ALERTS{alertname="HealthQueueAvailabilityBudgetBurn", alertstate="firing", severity="page", service="healthqueue-api", slo="availability"}
+            value: 1
+
+  # 2% errors (4x the budget) for a day: enough to exhaust the month's budget in about a
+  # week, so a ticket, but never fast enough to page.
+  - name: a slow availability burn opens a ticket but does not page
+    interval: 1m
+    input_series:
+      - series: http_requests_total{namespace="healthqueue", job="healthqueue-api", route="/v1/appointments", method="POST", status="201"}
+        values: 0+980x1500
+      - series: http_requests_total{namespace="healthqueue", job="healthqueue-api", route="/v1/appointments", method="POST", status="500"}
+        values: 0+20x1500
+    alert_rule_test:
+      - {eval_time: 1500m, alertname: HealthQueueAvailabilityBudgetBurn, exp_alerts: []}
+    promql_expr_test:
+      - expr: ALERTS{alertname="HealthQueueAvailabilityBudgetBurnSlow", alertstate="firing"}
+        eval_time: 1500m
+        exp_samples:
+          - labels: ALERTS{alertname="HealthQueueAvailabilityBudgetBurnSlow", alertstate="firing", severity="ticket", service="healthqueue-api", slo="availability"}
+            value: 1
 
   # Slow requests: from minute 60, half of all requests take longer than 300 ms (50x the budget).
   - name: a latency burn pages
@@ -77,17 +95,12 @@ tests:
         values: 0+100x60 6050+50x59
       - series: http_request_duration_seconds_count{namespace="healthqueue", job="healthqueue-api", route="/v1/appointments", method="GET"}
         values: 0+100x120
-    alert_rule_test:
-      - eval_time: 80m
-        alertname: HealthQueueLatencyBudgetBurn
-        exp_alerts:
-          - exp_labels: {severity: page, service: healthqueue-api, slo: latency}
-            exp_annotations:
-              summary: HealthQueue API is burning its latency error budget fast
-              description: >-
-                16.95% of /v1 requests are failing the latency SLI.
-                At this rate the 30-day error budget runs out within days.
-              runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/slo-burn-rate.md
+    promql_expr_test:
+      - expr: ALERTS{alertname="HealthQueueLatencyBudgetBurn", alertstate="firing"}
+        eval_time: 80m
+        exp_samples:
+          - labels: ALERTS{alertname="HealthQueueLatencyBudgetBurn", alertstate="firing", severity="page", service="healthqueue-api", slo="latency"}
+            value: 1
 
   - name: the API disappearing pages after 5 minutes
     interval: 1m
@@ -113,17 +126,12 @@ tests:
         values: 518400x10
     alert_rule_test:
       - {eval_time: 5m, alertname: HealthQueuePullCredentialExpiring, exp_alerts: []}
-      - eval_time: 5m
-        alertname: HealthQueuePullCredentialExpiringSoon
-        exp_alerts:
-          - exp_labels: {severity: ticket, namespace: healthqueue, secret: acr-pull}
-            exp_annotations:
-              summary: Registry pull credential expires in 5d 23h 55m 0s
-              description: >-
-                The acr-pull secret's ACR token password expires soon. Pods that need to pull
-                the image after that (rescheduling, new releases) will fail with ImagePullBackOff.
-                Rotate it with deploy/scripts/create-pull-secret.sh.
-              runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/image-pull-failures.md
+    promql_expr_test:
+      - expr: ALERTS{alertname="HealthQueuePullCredentialExpiringSoon", alertstate="firing"}
+        eval_time: 5m
+        exp_samples:
+          - labels: ALERTS{alertname="HealthQueuePullCredentialExpiringSoon", alertstate="firing", severity="ticket", namespace="healthqueue", secret="acr-pull"}
+            value: 1
 
   - name: a fresh 30-day pull credential raises nothing
     interval: 1m
