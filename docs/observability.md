@@ -80,7 +80,9 @@ feeds synthetic metrics through the real rules, and CI's `manifests` check runs
 `promtool test rules`. The tests cover:
 
 - healthy traffic stays silent;
-- a 50% outage pages within 10 minutes, but not in the first minute;
+- a 50% outage after hours of healthy traffic pages within 10 minutes, but not in the first
+  minute;
+- a 4× burn sustained for a day opens a ticket but never pages;
 - slow responses page;
 - the API disappearing pages after 5 minutes;
 - a pull credential with 6 days left raises a ticket, not a page;
