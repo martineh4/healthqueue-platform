@@ -12,7 +12,8 @@ deploy/
 │   └── install/          #   Argo CD v3.5.4, commit-pinned manifest + digest-pinned images
 ├── kind/cluster.yaml     # kind v0.33 cluster, Kubernetes 1.37 node pinned by digest
 └── scripts/
-    ├── bootstrap-cluster.sh    # cluster + Argo CD + root, idempotent
+    ├── bootstrap-cluster.sh    # cluster + Argo CD + root, idempotent; resumes a stopped cluster
+    ├── watch-version.sh        # print the served /version every 2 s (demo rollouts)
     └── create-pull-secret.sh   # pull-only, expiring registry credential (ADR-0004)
 ```
 

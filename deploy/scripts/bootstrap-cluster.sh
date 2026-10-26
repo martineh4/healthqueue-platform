@@ -7,7 +7,7 @@
 #   3. Check the registry pull secret exists (it is never in Git; ADR-0004)
 #   4. Seed the AppProjects, then apply the app-of-apps root; from then on Argo CD syncs
 #      everything from main
-#   5. Wait for the HealthQueue API to be Synced and Healthy
+#   5. Wait until the commit on main is deployed: Synced, rolled out and Healthy
 #
 # Usage: deploy/scripts/bootstrap-cluster.sh
 set -euo pipefail
@@ -71,15 +71,25 @@ step "4/5 app-of-apps root"
 kubectl apply --server-side --force-conflicts -f deploy/argocd/projects/
 kubectl apply -f deploy/argocd/root.yaml
 
-step "5/5 waiting for healthqueue-api (Synced + Healthy)"
+step "5/5 waiting for healthqueue-api (main deployed, Healthy)"
 for app in root argocd healthqueue-api; do
   for _ in $(seq 1 60); do
     kubectl -n argocd get application "$app" >/dev/null 2>&1 && break
     sleep 5
   done
 done
+# On a resumed cluster Argo CD still reports its last comparison, which can be "Synced" to
+# an older commit. Refresh now and wait for the commit currently on main to be deployed.
+target=$(git ls-remote origin refs/heads/main | cut -f1)
+[[ -n "$target" ]] || die "could not read origin/main"
+echo "main is at ${target::12}"
+kubectl -n argocd annotate application root healthqueue-api \
+  argocd.argoproj.io/refresh=hard --overwrite >/dev/null
+kubectl -n argocd wait application/healthqueue-api \
+  --for=jsonpath='{.status.sync.revision}'="$target" --timeout=600s
 kubectl -n argocd wait application/healthqueue-api \
   --for=jsonpath='{.status.sync.status}'=Synced --timeout=600s
+kubectl -n healthqueue rollout status deployment/healthqueue-api --timeout=600s
 kubectl -n argocd wait application/healthqueue-api \
   --for=jsonpath='{.status.health.status}'=Healthy --timeout=600s
 

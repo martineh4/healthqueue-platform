@@ -3,11 +3,13 @@
 Reference DevOps architecture for the HealthQueue patient appointment scheduling API:
 CI/CD with supply-chain security, OpenTofu on Azure, and GitOps delivery to Kubernetes via Argo CD.
 
-> Status: work in progress. Phases 0–7 are complete: API and tests, PR pipeline, encrypted
+> Status: work in progress. Phases 0–8 are complete: API and tests, PR pipeline, encrypted
 > remote state, PR-driven infrastructure delivery with OIDC, a signed, attested release
 > pipeline ([supply chain and SLSA](docs/supply-chain-slsa.md)), hardened Kustomize
-> manifests ([deploy/](deploy/README.md)), and GitOps delivery with Argo CD on kind
-> ([evidence](docs/evidence/phase-7-argocd.md)).
+> manifests ([deploy/](deploy/README.md)), GitOps delivery with Argo CD on kind
+> ([evidence](docs/evidence/phase-7-argocd.md)), and a deploy pull request for every verified
+> release ([ADR-0007](docs/adr/0007-pr-driven-image-promotion.md)). Live walkthrough:
+> [demo-day guide](docs/demo-day.md).
 
 ## Repository layout
 
