@@ -6,7 +6,7 @@ deploy/
 ├── overlays/
 │   └── prod/             # namespace, labels, image pinned by digest; Argo CD syncs this
 ├── argocd/               # app of apps (ADR-0006)
-│   ├── root.yaml         #   the one object applied by hand
+│   ├── root.yaml         #   applied by hand once (after the projects), then self-managed
 │   ├── projects/         #   AppProjects: default (locked), platform, healthqueue
 │   ├── apps/             #   Applications: argocd (self-managed), healthqueue-api
 │   └── install/          #   Argo CD v3.5.4, commit-pinned manifest + digest-pinned images
@@ -54,7 +54,7 @@ deploy/scripts/bootstrap-cluster.sh    # kind + Argo CD; stops at step 3 if acr-
 # create the pull secret (one of):
 deploy/scripts/create-pull-secret.sh   #   if `az login` was done in the Codespace
 #   ...or pipe a password from your workstation with --stdin (see the script header)
-deploy/scripts/bootstrap-cluster.sh    # re-run: applies the root app, waits for Healthy
+deploy/scripts/bootstrap-cluster.sh    # re-run: seeds projects, applies the root app, waits for Healthy
 kubectl -n healthqueue port-forward svc/healthqueue-api 8000:80
 ```
 
