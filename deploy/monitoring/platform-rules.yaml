@@ -1,0 +1,35 @@
+# Platform alerts: is GitOps delivery itself healthy? (argocd_app_info comes from the
+# ServiceMonitors in argocd-servicemonitors.yaml.) Tested in observability/tests.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: platform-gitops
+  namespace: monitoring
+spec:
+  groups:
+    - name: gitops
+      rules:
+        - alert: ArgoCDApplicationOutOfSync
+          # Merges normally sync within one 3-minute poll; 15 minutes means a failed or
+          # blocked sync (project violation, invalid manifest, missing CRD).
+          expr: argocd_app_info{sync_status!="Synced"} == 1
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: Argo CD application {{ $labels.name }} is {{ $labels.sync_status }}
+            description: >-
+              The cluster has not matched main for 15 minutes. Check the application's
+              sync status and events in the Argo CD UI.
+            runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/argocd-sync.md
+        - alert: ArgoCDApplicationDegraded
+          expr: argocd_app_info{health_status=~"Degraded|Missing"} == 1
+          for: 10m
+          labels:
+            severity: ticket
+          annotations:
+            summary: Argo CD application {{ $labels.name }} is {{ $labels.health_status }}
+            description: >-
+              Resources of this application have been unhealthy for 10 minutes. Open the
+              application in Argo CD to see which resource and why.
+            runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/argocd-sync.md

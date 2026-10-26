@@ -3,6 +3,33 @@
 **Applies to:** the `healthqueue` namespace on the kind cluster.
 **Background:** [ADR-0004](../adr/0004-registry-pull-authentication.md).
 
+## Alerts that lead here
+
+| Alert | Meaning | Do |
+|---|---|---|
+| `HealthQueuePullCredentialExpiringSoon` (ticket) | The `acr-pull` password expires in under 7 days | Rotate within the week: step 2 |
+| `HealthQueuePullCredentialExpiring` (page) | Under 1 day left, or already expired | Rotate now: step 2. Nothing is broken until a pod needs to pull |
+| `HealthQueuePullCredentialExpiryUnknown` (ticket) | No expiry metric for 30 minutes | See "Expiry not reported" below |
+
+To rotate from a workstation without an Azure login in the Codespace, pipe a new password in
+with `create-pull-secret.sh --stdin`; the [demo-day guide](../demo-day.md), step 2, has the
+exact command. After rotating, the alert clears within a minute, at the next kube-state-metrics
+scrape.
+
+### Expiry not reported
+
+```bash
+kubectl -n healthqueue get secret acr-pull \
+  -o jsonpath='{.metadata.annotations.healthqueue\.io/credential-expires-at}'; echo
+kubectl -n monitoring get pods -l app.kubernetes.io/name=kube-state-metrics
+```
+
+- **No secret, or no annotation:** create or rotate it with `create-pull-secret.sh`, which
+  always writes the annotation.
+- **Annotation present:** check that kube-state-metrics is running and its logs mention
+  `custom resource state`. Its configuration is `kube-state-metrics.customResourceState`
+  in `deploy/monitoring/values.yaml`.
+
 ## Symptoms
 
 - `kubectl get pods -n healthqueue` shows `ImagePullBackOff` or `ErrImagePull`.
@@ -84,6 +111,6 @@ https://azure.status.microsoft.
 
 ## Afterwards
 
-- If the cause was an expired credential, note how many days of warning `status` gave. Phase 10
-  alerts on the expiry annotation.
+- If the cause was an expired credential, find out why the expiry alerts (ticket at 7 days,
+  page at 1 day) did not lead to a rotation, and fix that.
 - Record the incident duration. It counts against the availability SLO.

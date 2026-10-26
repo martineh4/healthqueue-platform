@@ -1,0 +1,297 @@
+# HealthQueue API service level objectives (docs/observability.md, ADR-0008).
+#
+#   availability  99.5% of /v1 requests return a non-5xx response   (30-day window)
+#   latency       99% of /v1 requests complete within 300 ms        (30-day window)
+#
+# Recording rules turn each SLI into an error ratio over the windows the burn-rate alerts
+# need. Alerts follow the multiwindow, multi-burn-rate pattern from the Google SRE
+# workbook: a long window proves the budget is really burning, a short one makes the
+# alert stop soon after the problem does. Tested with promtool in CI
+# (observability/tests/slo.test.yaml).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: healthqueue-api-slo
+  annotations:
+    # The CRD arrives with the monitoring stack; Argo CD retries until it exists.
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  groups:
+    - name: healthqueue-slo-sli
+      interval: 30s
+      rules:
+        - record: slo:objective:ratio
+          expr: vector(0.995)
+          labels: {service: healthqueue-api, slo: availability}
+        - record: slo:objective:ratio
+          expr: vector(0.99)
+          labels: {service: healthqueue-api, slo: latency}
+        - record: slo:sli_error:ratio_rate5m
+          expr: |
+            # "or vector(0)": no 5xx series yet means zero errors, not "no data".
+            (sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", status=~"5.."}[5m])) or vector(0))
+            /
+            sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[5m]))
+          labels: {service: healthqueue-api, slo: availability}
+        - record: slo:sli_error:ratio_rate5m
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", le="0.3"}[5m]))
+              /
+              sum(rate(http_request_duration_seconds_count{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[5m]))
+            )
+          labels: {service: healthqueue-api, slo: latency}
+        - record: slo:sli_error:ratio_rate30m
+          expr: |
+            # "or vector(0)": no 5xx series yet means zero errors, not "no data".
+            (sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", status=~"5.."}[30m])) or vector(0))
+            /
+            sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[30m]))
+          labels: {service: healthqueue-api, slo: availability}
+        - record: slo:sli_error:ratio_rate30m
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", le="0.3"}[30m]))
+              /
+              sum(rate(http_request_duration_seconds_count{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[30m]))
+            )
+          labels: {service: healthqueue-api, slo: latency}
+        - record: slo:sli_error:ratio_rate1h
+          expr: |
+            # "or vector(0)": no 5xx series yet means zero errors, not "no data".
+            (sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", status=~"5.."}[1h])) or vector(0))
+            /
+            sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[1h]))
+          labels: {service: healthqueue-api, slo: availability}
+        - record: slo:sli_error:ratio_rate1h
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", le="0.3"}[1h]))
+              /
+              sum(rate(http_request_duration_seconds_count{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[1h]))
+            )
+          labels: {service: healthqueue-api, slo: latency}
+        - record: slo:sli_error:ratio_rate2h
+          expr: |
+            # "or vector(0)": no 5xx series yet means zero errors, not "no data".
+            (sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", status=~"5.."}[2h])) or vector(0))
+            /
+            sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[2h]))
+          labels: {service: healthqueue-api, slo: availability}
+        - record: slo:sli_error:ratio_rate2h
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", le="0.3"}[2h]))
+              /
+              sum(rate(http_request_duration_seconds_count{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[2h]))
+            )
+          labels: {service: healthqueue-api, slo: latency}
+        - record: slo:sli_error:ratio_rate6h
+          expr: |
+            # "or vector(0)": no 5xx series yet means zero errors, not "no data".
+            (sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", status=~"5.."}[6h])) or vector(0))
+            /
+            sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[6h]))
+          labels: {service: healthqueue-api, slo: availability}
+        - record: slo:sli_error:ratio_rate6h
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", le="0.3"}[6h]))
+              /
+              sum(rate(http_request_duration_seconds_count{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[6h]))
+            )
+          labels: {service: healthqueue-api, slo: latency}
+        - record: slo:sli_error:ratio_rate1d
+          expr: |
+            # "or vector(0)": no 5xx series yet means zero errors, not "no data".
+            (sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", status=~"5.."}[1d])) or vector(0))
+            /
+            sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[1d]))
+          labels: {service: healthqueue-api, slo: availability}
+        - record: slo:sli_error:ratio_rate1d
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", le="0.3"}[1d]))
+              /
+              sum(rate(http_request_duration_seconds_count{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[1d]))
+            )
+          labels: {service: healthqueue-api, slo: latency}
+        - record: slo:sli_error:ratio_rate3d
+          expr: |
+            # "or vector(0)": no 5xx series yet means zero errors, not "no data".
+            (sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", status=~"5.."}[3d])) or vector(0))
+            /
+            sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[3d]))
+          labels: {service: healthqueue-api, slo: availability}
+        - record: slo:sli_error:ratio_rate3d
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", le="0.3"}[3d]))
+              /
+              sum(rate(http_request_duration_seconds_count{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[3d]))
+            )
+          labels: {service: healthqueue-api, slo: latency}
+        - record: slo:sli_error:ratio_rate30d
+          expr: |
+            # "or vector(0)": no 5xx series yet means zero errors, not "no data".
+            (sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", status=~"5.."}[30d])) or vector(0))
+            /
+            sum(rate(http_requests_total{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[30d]))
+          labels: {service: healthqueue-api, slo: availability}
+        - record: slo:sli_error:ratio_rate30d
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*", le="0.3"}[30d]))
+              /
+              sum(rate(http_request_duration_seconds_count{namespace="healthqueue", job="healthqueue-api", route=~"/v1/.*"}[30d]))
+            )
+          labels: {service: healthqueue-api, slo: latency}
+        # 1 = untouched budget, 0 = exhausted, negative = SLO missed over the last 30 days.
+        - record: slo:error_budget_remaining:ratio
+          expr: |
+            1 - (slo:sli_error:ratio_rate30d / on(service, slo) (1 - slo:objective:ratio))
+    - name: healthqueue-slo-alerts
+      rules:
+        - alert: HealthQueueAvailabilityBudgetBurn
+          # Page: 2% of the 30-day budget gone in 1 hour (14.4x), or 5% in 6 hours (6x).
+          expr: |
+            (
+              slo:sli_error:ratio_rate1h{slo="availability"} > (14.4 * 0.005)
+              and
+              slo:sli_error:ratio_rate5m{slo="availability"} > (14.4 * 0.005)
+            )
+            or
+            (
+              slo:sli_error:ratio_rate6h{slo="availability"} > (6 * 0.005)
+              and
+              slo:sli_error:ratio_rate30m{slo="availability"} > (6 * 0.005)
+            )
+          for: 2m
+          labels:
+            severity: page
+          annotations:
+            summary: HealthQueue API is burning its availability error budget fast
+            description: >-
+              {{ $value | humanizePercentage }} of /v1 requests are failing the availability SLI.
+              At this rate the 30-day error budget runs out within days.
+            runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/slo-burn-rate.md
+        - alert: HealthQueueAvailabilityBudgetBurnSlow
+          # Ticket: 10% of the budget gone in 1 day (3x), or in 3 days (1x).
+          expr: |
+            (
+              slo:sli_error:ratio_rate1d{slo="availability"} > (3 * 0.005)
+              and
+              slo:sli_error:ratio_rate2h{slo="availability"} > (3 * 0.005)
+            )
+            or
+            (
+              slo:sli_error:ratio_rate3d{slo="availability"} > (1 * 0.005)
+              and
+              slo:sli_error:ratio_rate6h{slo="availability"} > (1 * 0.005)
+            )
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: HealthQueue API is steadily consuming its availability error budget
+            description: >-
+              {{ $value | humanizePercentage }} of /v1 requests are failing the availability SLI,
+              enough to exhaust the 30-day budget before the window ends.
+            runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/slo-burn-rate.md
+        - alert: HealthQueueLatencyBudgetBurn
+          # Page: 2% of the 30-day budget gone in 1 hour (14.4x), or 5% in 6 hours (6x).
+          expr: |
+            (
+              slo:sli_error:ratio_rate1h{slo="latency"} > (14.4 * 0.01)
+              and
+              slo:sli_error:ratio_rate5m{slo="latency"} > (14.4 * 0.01)
+            )
+            or
+            (
+              slo:sli_error:ratio_rate6h{slo="latency"} > (6 * 0.01)
+              and
+              slo:sli_error:ratio_rate30m{slo="latency"} > (6 * 0.01)
+            )
+          for: 2m
+          labels:
+            severity: page
+          annotations:
+            summary: HealthQueue API is burning its latency error budget fast
+            description: >-
+              {{ $value | humanizePercentage }} of /v1 requests are failing the latency SLI.
+              At this rate the 30-day error budget runs out within days.
+            runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/slo-burn-rate.md
+        - alert: HealthQueueLatencyBudgetBurnSlow
+          # Ticket: 10% of the budget gone in 1 day (3x), or in 3 days (1x).
+          expr: |
+            (
+              slo:sli_error:ratio_rate1d{slo="latency"} > (3 * 0.01)
+              and
+              slo:sli_error:ratio_rate2h{slo="latency"} > (3 * 0.01)
+            )
+            or
+            (
+              slo:sli_error:ratio_rate3d{slo="latency"} > (1 * 0.01)
+              and
+              slo:sli_error:ratio_rate6h{slo="latency"} > (1 * 0.01)
+            )
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: HealthQueue API is steadily consuming its latency error budget
+            description: >-
+              {{ $value | humanizePercentage }} of /v1 requests are failing the latency SLI,
+              enough to exhaust the 30-day budget before the window ends.
+            runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/slo-burn-rate.md
+    - name: healthqueue-operations
+      rules:
+        - alert: HealthQueueAPIUnavailable
+          # No successful scrape for 5 minutes: the pod is gone, crash-looping or unreachable.
+          # Longer than a Recreate rollout, so normal deploys do not page.
+          expr: absent(up{namespace="healthqueue", job="healthqueue-api"} == 1)
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: HealthQueue API has no healthy, scrapeable pod
+            description: Prometheus has not scraped the API successfully for 5 minutes.
+            runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/api-unavailable.md
+        - alert: HealthQueuePullCredentialExpiringSoon
+          expr: |
+            healthqueue_credential_expiry_timestamp_seconds{namespace="healthqueue", secret="acr-pull"} - time()
+              < 7 * 86400
+          labels:
+            severity: ticket
+          annotations:
+            summary: Registry pull credential expires in {{ $value | humanizeDuration }}
+            description: >-
+              The acr-pull secret's ACR token password expires soon. Pods that need to pull
+              the image after that (rescheduling, new releases) will fail with ImagePullBackOff.
+              Rotate it with deploy/scripts/create-pull-secret.sh.
+            runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/image-pull-failures.md
+        - alert: HealthQueuePullCredentialExpiring
+          expr: |
+            healthqueue_credential_expiry_timestamp_seconds{namespace="healthqueue", secret="acr-pull"} - time()
+              < 86400
+          labels:
+            severity: page
+          annotations:
+            summary: Registry pull credential expires in {{ $value | humanizeDuration }}
+            description: >-
+              The acr-pull secret's ACR token password expires within a day, or already has.
+              Rotate it now with deploy/scripts/create-pull-secret.sh.
+            runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/image-pull-failures.md
+        - alert: HealthQueuePullCredentialExpiryUnknown
+          # Covers a missing secret, a missing annotation, and kube-state-metrics not running.
+          expr: absent(healthqueue_credential_expiry_timestamp_seconds{namespace="healthqueue", secret="acr-pull"})
+          for: 30m
+          labels:
+            severity: ticket
+          annotations:
+            summary: Registry pull credential expiry is not being reported
+            description: >-
+              No expiry metric for healthqueue/acr-pull. Either the secret or its
+              healthqueue.io/credential-expires-at annotation is missing, or kube-state-metrics
+              is not exporting it, so an upcoming expiry would go unnoticed.
+            runbook_url: https://github.com/martineh4/healthqueue-platform/blob/main/docs/runbooks/image-pull-failures.md

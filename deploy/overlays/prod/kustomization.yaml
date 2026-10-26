@@ -10,6 +10,8 @@ namespace: healthqueue
 resources:
   - namespace.yaml
   - ../../base
+  # Scrape config, SLO rules and alerts, dashboard (ADR-0008): versioned with the service.
+  - ../../../observability
 
 labels:
   - pairs:

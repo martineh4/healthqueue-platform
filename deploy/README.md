@@ -4,16 +4,18 @@
 deploy/
 ├── base/                 # environment-neutral manifests (not deployable alone)
 ├── overlays/
-│   └── prod/             # namespace, labels, image pinned by digest; Argo CD syncs this
+│   └── prod/             # namespace, labels, image pinned by digest, ../../../observability
 ├── argocd/               # app of apps (ADR-0006)
 │   ├── root.yaml         #   applied by hand once (after the projects), then self-managed
-│   ├── projects/         #   AppProjects: default (locked), platform, healthqueue
-│   ├── apps/             #   Applications: argocd (self-managed), healthqueue-api
+│   ├── projects/         #   AppProjects: default (locked), platform, healthqueue, monitoring
+│   ├── apps/             #   Applications: argocd (self-managed), healthqueue-api, monitoring
 │   └── install/          #   Argo CD v3.5.4, commit-pinned manifest + digest-pinned images
+├── monitoring/           # kube-prometheus-stack 92.3.0 via kustomize helmCharts (ADR-0008)
 ├── kind/cluster.yaml     # kind v0.33 cluster, Kubernetes 1.37 node pinned by digest
 └── scripts/
     ├── bootstrap-cluster.sh    # cluster + Argo CD + root, idempotent; resumes a stopped cluster
     ├── watch-version.sh        # print the served /version every 2 s (demo rollouts)
+    ├── generate-traffic.sh     # demo traffic so the SLO dashboard has data
     └── create-pull-secret.sh   # pull-only, expiring registry credential (ADR-0004)
 ```
 
@@ -21,7 +23,10 @@ Render and inspect what Argo CD will apply:
 
 ```bash
 kubectl kustomize deploy/overlays/prod
+kustomize build --enable-helm deploy/monitoring     # needs helm on PATH
 ```
+
+SLOs, alerts and dashboards: [docs/observability.md](../docs/observability.md).
 
 ## What is in the base
 

@@ -4,10 +4,12 @@
 #
 #   1. kind cluster `healthqueue` (node image pinned by digest)
 #   2. Argo CD from deploy/argocd/install (commit- and digest-pinned)
-#   3. Check the registry pull secret exists (it is never in Git; ADR-0004)
+#   3. Secrets that are never in Git: check the registry pull secret exists (ADR-0004);
+#      create Grafana's admin password if missing (ADR-0008)
 #   4. Seed the AppProjects, then apply the app-of-apps root; from then on Argo CD syncs
 #      everything from main
-#   5. Wait until the commit on main is deployed: Synced, rolled out and Healthy
+#   5. Wait until the commit on main is deployed (Synced, rolled out, Healthy), and for the
+#      monitoring stack to be Healthy
 #
 # Usage: deploy/scripts/bootstrap-cluster.sh
 set -euo pipefail
@@ -52,7 +54,7 @@ for d in argocd-server argocd-repo-server argocd-redis argocd-dex-server; do
 done
 kubectl -n argocd rollout status statefulset/argocd-application-controller --timeout=300s
 
-step "3/5 registry pull secret"
+step "3/5 secrets that never come from Git"
 if ! kubectl -n healthqueue get secret acr-pull >/dev/null 2>&1; then
   cat >&2 <<'MSG'
 The acr-pull secret is missing. Create it, then re-run this script:
@@ -63,6 +65,19 @@ MSG
 fi
 deploy/scripts/create-pull-secret.sh status
 
+# Grafana admin login (ADR-0008): a random password created once per cluster, stored only in
+# the cluster. Argo CD does not manage this Secret, so it is never pruned or overwritten.
+kubectl get namespace monitoring >/dev/null 2>&1 \
+  || kubectl create namespace monitoring >/dev/null # Argo CD adopts it and adds PSA labels
+if kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1; then
+  echo "monitoring/grafana-admin: exists"
+else
+  kubectl -n monitoring create secret generic grafana-admin \
+    --from-literal=admin-user=admin \
+    --from-literal=admin-password="$(head -c 24 /dev/urandom | base64 | tr -d '/+=')" >/dev/null
+  echo "monitoring/grafana-admin: created (random password)"
+fi
+
 step "4/5 app-of-apps root"
 # The root belongs to the `platform` AppProject, which is defined inside what the root syncs.
 # Argo CD will not start an Application whose project does not exist yet, so seed the
@@ -72,7 +87,7 @@ kubectl apply --server-side --force-conflicts -f deploy/argocd/projects/
 kubectl apply -f deploy/argocd/root.yaml
 
 step "5/5 waiting for healthqueue-api (main deployed, Healthy)"
-for app in root argocd healthqueue-api; do
+for app in root argocd healthqueue-api monitoring; do
   for _ in $(seq 1 60); do
     kubectl -n argocd get application "$app" >/dev/null 2>&1 && break
     sleep 5
@@ -92,6 +107,9 @@ kubectl -n argocd wait application/healthqueue-api \
 kubectl -n healthqueue rollout status deployment/healthqueue-api --timeout=600s
 kubectl -n argocd wait application/healthqueue-api \
   --for=jsonpath='{.status.health.status}'=Healthy --timeout=600s
+# The monitoring stack's first install pulls several images; give it longer.
+kubectl -n argocd wait application/monitoring \
+  --for=jsonpath='{.status.health.status}'=Healthy --timeout=900s
 
 kubectl -n argocd get applications
 kubectl -n healthqueue get pods,svc,pvc,networkpolicy
@@ -102,4 +120,8 @@ Done. Useful next commands:
   kubectl -n healthqueue port-forward svc/healthqueue-api 8000:80     # API on :8000
   kubectl -n argocd port-forward svc/argocd-server 8080:443           # Argo CD UI on :8080
   argocd admin initial-password -n argocd                             # UI login (admin)
+  kubectl -n monitoring port-forward svc/kps-grafana 3000:80          # Grafana on :3000
+  kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d
+  kubectl -n monitoring port-forward svc/kps-prometheus 9090:9090     # Prometheus on :9090
+  kubectl -n monitoring port-forward svc/kps-alertmanager 9093:9093   # Alertmanager on :9093
 MSG

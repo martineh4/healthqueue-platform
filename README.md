@@ -19,7 +19,7 @@ CI/CD with supply-chain security, OpenTofu on Azure, and GitOps delivery to Kube
 | `.github/workflows/` | CI (PR checks), release (build → scan → SBOM → sign → attest), infra |
 | `infra/` | OpenTofu: state bootstrap, Azure modules, `prod` environment |
 | `deploy/` | Kustomize base/overlays and Argo CD applications |
-| `observability/` | SLO recording rules, burn-rate alerts, dashboards |
+| `observability/` | The API's scrape config, SLO recording rules, burn-rate alerts (with promtool tests) and Grafana dashboard ([docs](docs/observability.md)) |
 | `dora/` | Synthetic 90-day deployment data generator and analysis |
 | `docs/` | Architecture, ADRs, runbooks, SLO, SLSA, and DORA reports |
 | `.devcontainer/` | Codespace with Docker, kind, Argo CD, OpenTofu, cosign, Trivy, Syft |
