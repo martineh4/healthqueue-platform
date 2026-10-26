@@ -5,7 +5,8 @@
 #   1. kind cluster `healthqueue` (node image pinned by digest)
 #   2. Argo CD from deploy/argocd/install (commit- and digest-pinned)
 #   3. Check the registry pull secret exists (it is never in Git; ADR-0004)
-#   4. Apply the app-of-apps root once; from then on Argo CD syncs everything from main
+#   4. Seed the AppProjects, then apply the app-of-apps root; from then on Argo CD syncs
+#      everything from main
 #   5. Wait for the HealthQueue API to be Synced and Healthy
 #
 # Usage: deploy/scripts/bootstrap-cluster.sh
@@ -53,7 +54,11 @@ fi
 deploy/scripts/create-pull-secret.sh status
 
 step "4/5 app-of-apps root"
-# Applied by hand exactly once per cluster; it then manages itself and everything else.
+# The root belongs to the `platform` AppProject, which is defined inside what the root syncs.
+# Argo CD will not start an Application whose project does not exist yet, so seed the
+# projects first; the root then adopts them from Git like everything else. Both are applied
+# by hand once per cluster, and re-applying is harmless.
+kubectl apply --server-side --force-conflicts -f deploy/argocd/projects/
 kubectl apply -f deploy/argocd/root.yaml
 
 step "5/5 waiting for healthqueue-api (Synced + Healthy)"

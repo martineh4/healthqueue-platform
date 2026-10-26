@@ -1,6 +1,6 @@
-# App of apps: the only object applied by hand (deploy/scripts/bootstrap-cluster.sh). It
-# syncs deploy/argocd, including this file, so from then on Git is the source of truth for
-# every Application and AppProject.
+# App of apps: applied by hand once, right after the AppProjects it depends on
+# (deploy/scripts/bootstrap-cluster.sh). It syncs deploy/argocd, including this file and the
+# projects, so from then on Git is the source of truth for every Application and AppProject.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

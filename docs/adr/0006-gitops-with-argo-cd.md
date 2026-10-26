@@ -41,8 +41,11 @@ Requirements:
 
 ### App of apps
 
-`deploy/scripts/bootstrap-cluster.sh` applies one object by hand, the `root` Application. It
-syncs `deploy/argocd/`, which holds:
+`deploy/scripts/bootstrap-cluster.sh` applies the `root` Application by hand, once. The
+three AppProjects go first: `root` belongs to the `platform` project, and Argo CD will not
+start an Application whose project does not exist yet ("project platform which does not
+exist", found during the first live bootstrap). `root` then adopts the projects from Git,
+so a later change to them is still a pull request. `root` syncs `deploy/argocd/`, which holds:
 
 | Object | Purpose |
 |---|---|
