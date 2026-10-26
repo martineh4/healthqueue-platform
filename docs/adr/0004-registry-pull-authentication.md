@@ -104,8 +104,9 @@ kubelet identity.
 
 - **Expiry is a scheduled outage if ignored.** Running pods keep running (the image is cached on
   the node), but rescheduled or new pods hit `ImagePullBackOff` once the password expires.
-  Mitigations: the `status` subcommand, the expiry annotation (phase 10 can alert on it), and the
-  [runbook](../runbooks/image-pull-failures.md).
+  Mitigations: the `status` subcommand, which `bootstrap-cluster.sh` runs on every start (it
+  warns under 7 days), and the [runbook](../runbooks/image-pull-failures.md). An alert on the
+  expiry annotation was tried in phase 10 and removed; see ADR-0008.
 - **The Secret sits in the kind cluster's etcd, base64-encoded, without encryption at rest.**
   That is acceptable for a disposable cluster holding a 30-day, read-only, single-repository
   credential.
@@ -132,4 +133,3 @@ kubelet identity.
 - The cluster moves to AKS: switch to the kubelet identity and remove `imagePullSecrets`.
 - More than one cluster pulls with the token: rotate with alternating `password1`/`password2` so
   each cluster can be updated without a gap.
-- Phase 10 exists: alert when `credential-expires-at` is under 7 days away.

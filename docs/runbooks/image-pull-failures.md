@@ -3,32 +3,32 @@
 **Applies to:** the `healthqueue` namespace on the kind cluster.
 **Background:** [ADR-0004](../adr/0004-registry-pull-authentication.md).
 
-## Alerts that lead here
+## How you get here
 
-| Alert | Meaning | Do |
-|---|---|---|
-| `HealthQueuePullCredentialExpiringSoon` (ticket) | The `acr-pull` password expires in under 7 days | Rotate within the week: step 2 |
-| `HealthQueuePullCredentialExpiring` (page) | Under 1 day left, or already expired | Rotate now: step 2. Nothing is broken until a pod needs to pull |
-| `HealthQueuePullCredentialExpiryUnknown` (ticket) | No expiry metric for 30 minutes | See "Expiry not reported" below |
+- **`HealthQueueAPIUnavailable` (page):** a new pod could not pull its image, so after a
+  Recreate rollout no pod is serving. The [api-unavailable](api-unavailable.md) runbook sends
+  you here when the pod shows `ImagePullBackOff`.
+- **`ArgoCDApplicationDegraded` (ticket):** the same failure, seen from Argo CD.
+- **`warning: rotate soon`** from `bootstrap-cluster.sh`: the password expires in under 7 days.
+  Rotate it now (step 2), before anything fails.
 
-To rotate from a workstation without an Azure login in the Codespace, pipe a new password in
-with `create-pull-secret.sh --stdin`; the [demo-day guide](../demo-day.md), step 2, has the
-exact command. After rotating, the alert clears within a minute, at the next kube-state-metrics
-scrape.
+### Checking the password's expiry
 
-### Expiry not reported
+There is no expiry alert: kube-state-metrics cannot turn a Secret's annotation into a metric
+(ADR-0008). Check the days left with:
 
 ```bash
-kubectl -n healthqueue get secret acr-pull \
-  -o jsonpath='{.metadata.annotations.healthqueue\.io/credential-expires-at}'; echo
-kubectl -n monitoring get pods -l app.kubernetes.io/name=kube-state-metrics
+deploy/scripts/create-pull-secret.sh status
 ```
 
-- **No secret, or no annotation:** create or rotate it with `create-pull-secret.sh`, which
-  always writes the annotation.
-- **Annotation present:** check that kube-state-metrics is running and its logs mention
-  `custom resource state`. Its configuration is `kube-state-metrics.customResourceState`
-  in `deploy/monitoring/values.yaml`.
+It reads the `healthqueue.io/credential-expires-at` annotation that the script writes on every
+rotation. `bootstrap-cluster.sh` runs it on every start and warns under 7 days. To rotate from a
+workstation without an Azure login in the Codespace, pipe a new password in with
+`create-pull-secret.sh --stdin`; the [demo-day guide](../demo-day.md), step 2, has the exact
+command.
+
+On AKS this whole failure mode goes away: the kubelet's managed identity pulls with `AcrPull`,
+and there is no password to expire (ADR-0004).
 
 ## Symptoms
 
@@ -111,6 +111,7 @@ https://azure.status.microsoft.
 
 ## Afterwards
 
-- If the cause was an expired credential, find out why the expiry alerts (ticket at 7 days,
-  page at 1 day) did not lead to a rotation, and fix that.
+- If the cause was an expired credential, find out why it was not rotated. The only warning is
+  `bootstrap-cluster.sh`'s "rotate soon" under 7 days, so a cluster left running for weeks
+  without a bootstrap gets none. Put the expiry date in the team calendar when rotating.
 - Record the incident duration. It counts against the availability SLO.
