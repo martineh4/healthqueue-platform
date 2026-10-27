@@ -1,19 +1,133 @@
 # HealthQueue Platform
 
-Reference DevOps architecture for the HealthQueue patient appointment scheduling API:
-CI/CD with supply-chain security, OpenTofu on Azure, and GitOps delivery to Kubernetes via Argo CD.
+HealthQueue's appointment scheduling API, and the platform that takes a reviewed change to
+production and shows whether it is healthy there.
 
-> Status: work in progress. Phases 0–8, 10 and 11 are complete: API and tests, PR pipeline, encrypted
-> remote state, PR-driven infrastructure delivery with OIDC, a signed, attested release
-> pipeline ([supply chain and SLSA](docs/supply-chain-slsa.md)), hardened Kustomize
-> manifests ([deploy/](deploy/README.md)), GitOps delivery with Argo CD on kind
-> ([evidence](docs/evidence/phase-7-argocd.md)), and a deploy pull request for every verified
-> release ([ADR-0007](docs/adr/0007-pr-driven-image-promotion.md)), and SLOs with burn-rate
-> alerts and a Grafana dashboard ([observability](docs/observability.md),
-> [evidence](docs/evidence/phase-10-observability.md)), and DORA metrics from 90 days of
-> synthetic deployments, with the toil to remove first ([DORA report](docs/dora-report.md)).
-> Live walkthrough:
-> [demo-day guide](docs/demo-day.md).
+- **Built for one maintainer.** Every production change is reviewed, traceable to its source
+  commit, and reversible with one revert.
+- **Run in a course environment:** Azure, plus a Kubernetes cluster in a Codespace.
+- **Production path:** each production decision is recorded, including where it would differ
+  from the course environment.
+
+## For leadership: what this gives you
+
+| Question | Answer | Evidence |
+|---|---|---|
+| Can anything reach production without review? | No. Production runs the image digest pinned in Git, and that changes only by a merged pull request with passing checks. Merging is the deployment; reverting is the rollback. | [ADR-0007](docs/adr/0007-pr-driven-image-promotion.md), [phase 8](docs/evidence/phase-8-deploy-pr.md) |
+| Do we know exactly what we run? | Yes. Each image is signed, has an SBOM and SLSA Build L2 provenance, and its evidence is kept in write-once storage. Fixable HIGH and CRITICAL vulnerabilities block the release. | [Supply chain summary](docs/supply-chain-slsa.md), [phase 5](docs/evidence/phase-5-release.md) |
+| Are there credentials to steal? | No long-lived ones. CI reaches Azure and signs images with short-lived OIDC tokens, and nothing in CI can reach the cluster. | [ADR-0003](docs/adr/0003-github-actions-workload-identity.md), [architecture](docs/architecture.md#identities-and-trust-boundaries) |
+| How do we know it is healthy? | Two SLOs: 99.5% of requests succeed, and 99% are served in 300 ms. Alerts fire when the error budget burns too fast, and each alert links to a runbook. | [Observability plan](docs/observability.md), [phase 10](docs/evidence/phase-10-observability.md) |
+| How fast and safe is delivery? | On 90 days of synthetic data modelling this process: lead time and recovery are at the DORA elite level, and deployment frequency is high. The report ranks what to change next. | [DORA analysis](docs/dora-report.md) |
+
+**Known gaps, by decision:**
+
+- **The cluster does not verify signatures yet.** Phase 9, admission control with Kyverno, is
+  deferred. Today the control is the reviewed deploy pull request.
+- **Production would differ.** It would run on AKS with PostgreSQL and no pull secret. The
+  course environment uses kind, SQLite on one replica, and a 30-day pull token.
+- **The DORA figures are simulated.** The report explains how to run it on real deployments.
+
+Details: [architecture, "Not built yet"](docs/architecture.md#not-built-yet).
+
+## Start here
+
+1. **[Architecture](docs/architecture.md):** the system on one page and how a change flows.
+2. **[Supply chain security summary](docs/supply-chain-slsa.md):** controls by threat, and
+   the SLSA level.
+3. **[Observability plan](docs/observability.md):** SLOs, alerts, dashboard, error budget
+   policy.
+4. **[DORA analysis](docs/dora-report.md):** delivery metrics against the 2024 benchmarks, and
+   the recommendations.
+5. **[Demo-day guide](docs/demo-day.md):** the live walkthrough, step by step.
+
+## Rubric map
+
+Where each part of the capstone rubric (150 points, five criteria of 30) is covered, and the
+evidence that shows it working.
+
+**Required supporting documents**
+
+| Document | File |
+|---|---|
+| Observability plan | [`docs/observability.md`](docs/observability.md) |
+| DORA analysis | [`docs/dora-report.md`](docs/dora-report.md) |
+| Supply chain security summary | [`docs/supply-chain-slsa.md`](docs/supply-chain-slsa.md) |
+
+### 1. CI/CD Pipeline with Supply Chain Security (CLO2)
+
+| Rubric asks for | Where | Evidence |
+|---|---|---|
+| Build | [`release.yml`](.github/workflows/release.yml): digest-pinned base, hash-locked dependencies ([`app/Dockerfile`](app/Dockerfile), [`requirements.lock`](app/requirements.lock)) | [Phase 5: release runs](docs/evidence/phase-5-release.md#1-release-runs) |
+| Test | [`ci.yml`](.github/workflows/ci.yml) `lint-test`: ruff, pytest with an 85% coverage gate; required on every pull request | [`ci.yml`](.github/workflows/ci.yml) required checks |
+| Vulnerability scan | Trivy on the repository and the image in every pull request; release gate on fixable HIGH and CRITICAL | [Phase 5: vulnerability findings](docs/evidence/phase-5-release.md#5-vulnerability-findings-explained) |
+| SBOM | Syft SPDX SBOM, attested to the image | [Phase 5: in-pipeline verification](docs/evidence/phase-5-release.md#2-in-pipeline-verification-fails-the-release-if-any-check-fails) |
+| Signed artifacts | cosign keyless signature and SLSA provenance, verified in the pipeline and independently | [Phase 5: independent verification](docs/evidence/phase-5-release.md#3-independent-verification-from-a-workstation-not-the-ci-runner), [WORM evidence](docs/evidence/phase-5-release.md#4-evidence-in-worm-storage) |
+| SLSA alignment documented | [Supply chain summary: SLSA assessment](docs/supply-chain-slsa.md#slsa-assessment) (Build L2; the L3 gap and its plan), [controls by threat](docs/supply-chain-slsa.md#controls-by-threat) | [Supply chain: gaps](docs/supply-chain-slsa.md#gaps-and-roadmap) |
+
+### 2. Infrastructure as Code and GitOps Deployment (CLO3)
+
+| Rubric asks for | Where | Evidence |
+|---|---|---|
+| OpenTofu provisions cloud resources | [`infra/`](infra/README.md): registry, evidence storage, CI identities on Azure | [Phase 4: merge applies](docs/evidence/phase-4-iac-oidc.md#4-merge-apply-as-the-apply-identity) |
+| Remote state | Encrypted, locked Azure state ([ADR-0002](docs/adr/0002-opentofu-state-management.md), [how state is handled](infra/README.md#how-state-is-handled)) | [Phase 3: ciphertext at rest](docs/evidence/phase-3-remote-state.md#4-state-is-ciphertext-at-rest), [locking](docs/evidence/phase-3-remote-state.md#5-locking-prevents-concurrent-runs) |
+| Containerized app on Kubernetes | [`app/Dockerfile`](app/Dockerfile), [`deploy/`](deploy/README.md): hardened manifests under `restricted` Pod Security | [Phase 7: workload verification](docs/evidence/phase-7-argocd.md#3-workload-verification), [phase 10: Pod Security](docs/evidence/phase-10-observability.md#3-pod-security) |
+| Deployed via Argo CD | App of apps ([ADR-0006](docs/adr/0006-gitops-with-argo-cd.md)) | [Phase 7: GitOps controls](docs/evidence/phase-7-argocd.md#4-gitops-controls) |
+| PR-driven workflow | Infrastructure: plan on the PR, apply on merge ([infra pull requests](infra/README.md#day-to-day-prod-pull-requests)). Application: a deploy PR per release, where merge = deploy ([ADR-0007](docs/adr/0007-pr-driven-image-promotion.md)) | [Phase 4: plan on the PR](docs/evidence/phase-4-iac-oidc.md#3-pull-request-4-plan-as-the-read-only-identity), [phase 8](docs/evidence/phase-8-deploy-pr.md) |
+
+### 3. DORA Metrics Analysis and Toil Reduction (CLO4)
+
+| Rubric asks for | Where | Evidence |
+|---|---|---|
+| Synthetic 90-day DORA data | [`dora/generate.py`](dora/generate.py) (seeded, modelling the real pipeline), [`dora/data/`](dora/data/) | [How the data is made](docs/dora-report.md#how-the-data-is-made) |
+| Analyzed against benchmarks | [`dora/analyze.py`](dora/analyze.py): the four metrics against the DORA 2024 elite, high, medium and low levels, with charts | [Summary](docs/dora-report.md#summary), [robustness across 20 seeds](docs/dora-report.md#robustness-across-seeds) |
+| Toil-reduction recommendations tied to evidence | Each recommendation cites a number from the data and a projection from rerunning the same seed | [Recommendations](docs/dora-report.md#recommendations-in-order), [toil](docs/dora-report.md#toil) |
+
+CI regenerates the data, report and charts on every pull request and fails if the committed
+files differ.
+
+### 4. Observability and SRE Reliability Evaluation (CLO5)
+
+| Rubric asks for | Where | Evidence |
+|---|---|---|
+| SLIs/SLOs for the appointment API | [Service level objectives](docs/observability.md#service-level-objectives): availability 99.5%, latency 99% in 300 ms, over 30 days | [Phase 10: Prometheus scrapes the API](docs/evidence/phase-10-observability.md#4-prometheus-scrapes-the-api) |
+| Error budget computed | Budget per SLO (0.5% of requests, about 3.6 hours of outage in 30 days), recording rules, [error budget policy](docs/observability.md#error-budget-policy), burn-rate alerts with unit tests ([`observability/`](observability/)) | [Phase 10: live budget and rules](docs/evidence/phase-10-observability.md#9-re-check-after-pr-21-merged) |
+| Metrics, logs and traces, with rationale | [Signals](docs/observability.md#signals): metrics, JSON logs without PHI. [Gaps and production differences](docs/observability.md#gaps-and-production-differences): log store and tracing, and why not yet ([ADR-0008](docs/adr/0008-observability-and-slos.md)) | [Phase 10: Grafana loads the dashboard](docs/evidence/phase-10-observability.md#6-grafana-loads-the-dashboard) |
+
+### 5. Production-Grade Design and Technical Documentation (CLO6)
+
+| Rubric asks for | Where |
+|---|---|
+| Architecture | [`docs/architecture.md`](docs/architecture.md): system diagram, change flow, trust boundaries, course and production designs |
+| Runbooks | [`docs/runbooks/`](docs/runbooks/): API unavailable, SLO burn rate, Argo CD sync, image pull failures |
+| ADRs | [Eight ADRs](docs/adr/README.md), each with alternatives considered and when to revisit |
+| README | This file |
+| Decisions and trade-offs for a CTO | [For leadership](#for-leadership-what-this-gives-you) above; [course environment and production](docs/architecture.md#course-environment-and-production); [supply chain summary for leadership](docs/supply-chain-slsa.md#summary-for-leadership); the approval-click trade-off ([DORA report](docs/dora-report.md#1-decide-when-to-trade-the-approval-click-for-speed)) |
+
+## Phases
+
+| Phase | Delivered | Status | Evidence |
+|---|---|---|---|
+| 0–1 | Repository scaffold; appointment API with tests | Done | `app/tests`, CI `lint-test` |
+| 2 | PR pipeline (lint, tests with an 85% coverage gate, hadolint, Trivy); hardened image | Done | [`ci.yml`](.github/workflows/ci.yml) |
+| 3 | OpenTofu remote state, encrypted with a Key Vault key | Done | [phase 3](docs/evidence/phase-3-remote-state.md), [ADR-0002](docs/adr/0002-opentofu-state-management.md) |
+| 4 | Infrastructure by pull request, with GitHub OIDC and least-privilege identities | Done | [phase 4](docs/evidence/phase-4-iac-oidc.md), [ADR-0003](docs/adr/0003-github-actions-workload-identity.md) |
+| 5 | Signed, attested release pipeline with WORM evidence | Done | [phase 5](docs/evidence/phase-5-release.md), [supply chain](docs/supply-chain-slsa.md) |
+| 6 | Hardened Kustomize manifests; pull-only registry token | Done | [phase 6](docs/evidence/phase-6-manifests.md), [ADR-0004](docs/adr/0004-registry-pull-authentication.md) |
+| 7 | GitOps with Argo CD (app of apps) on kind | Done | [phase 7](docs/evidence/phase-7-argocd.md), [ADR-0006](docs/adr/0006-gitops-with-argo-cd.md) |
+| 8 | A deploy pull request for every verified release | Done | [phase 8](docs/evidence/phase-8-deploy-pr.md), [ADR-0007](docs/adr/0007-pr-driven-image-promotion.md) |
+| 9 | Signature enforcement at admission (Kyverno) | **Deferred** | [supply chain gaps](docs/supply-chain-slsa.md#gaps-and-roadmap) |
+| 10 | Monitoring stack, SLOs, burn-rate alerts, dashboard | Done, verified live | [phase 10](docs/evidence/phase-10-observability.md), [ADR-0008](docs/adr/0008-observability-and-slos.md) |
+| 11 | DORA metrics from a seeded 90-day simulation | Done | [DORA report](docs/dora-report.md) |
+| 12 | Documentation: architecture, this README, consistency pass | Done | [architecture](docs/architecture.md) |
+
+## Documentation
+
+| | |
+|---|---|
+| Decisions | [ADR index](docs/adr/README.md): region, state, CI identity, registry pull, data store, GitOps, promotion, observability |
+| Operations | Runbooks: [API unavailable](docs/runbooks/api-unavailable.md), [SLO burn rate](docs/runbooks/slo-burn-rate.md), [Argo CD sync](docs/runbooks/argocd-sync.md), [image pull failures](docs/runbooks/image-pull-failures.md) |
+| Evidence | [`docs/evidence/`](docs/evidence/): what was run, when, and what it showed, for each phase |
+| Component guides | [Infrastructure](infra/README.md), [Kubernetes deployment](deploy/README.md) |
 
 ## Repository layout
 
@@ -25,7 +139,7 @@ CI/CD with supply-chain security, OpenTofu on Azure, and GitOps delivery to Kube
 | `deploy/` | Kustomize base/overlays and Argo CD applications |
 | `observability/` | The API's scrape config, SLO recording rules, burn-rate alerts (with promtool tests) and Grafana dashboard ([docs](docs/observability.md)) |
 | `dora/` | Seeded 90-day deployment simulation, DORA metrics and charts ([report](docs/dora-report.md)) |
-| `docs/` | Architecture, ADRs, runbooks, SLO, SLSA, and DORA reports |
+| `docs/` | Architecture, ADRs, runbooks, evidence, and the observability, supply chain and DORA documents |
 | `.devcontainer/` | Codespace with Docker, kind, Argo CD, OpenTofu, cosign, Trivy, Syft |
 
 ## Quickstart (no Docker required)

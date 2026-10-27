@@ -11,7 +11,7 @@ check that independently.
 | Question | Answer |
 |---|---|
 | Can someone push code to production without review? | No. `main` only accepts pull requests with passing checks; the release pipeline only runs from `main`. |
-| Can someone swap the image after it is built? | No. Deployments reference an immutable digest, and every image is signed. A substituted image has no valid signature (enforcement at deploy time: phase 9). |
+| Can someone swap the image after it is built? | Not without a reviewed pull request. Deployments reference an immutable digest that only a merged deploy PR can change, and every image is signed and verified before that PR is opened. The cluster does not yet check signatures itself: that is phase 9, deferred. |
 | Do we know what is inside each image? | Yes. Every release has an SBOM listing every package, signed and attached to the image. |
 | Do we ship known vulnerabilities? | Not at HIGH or CRITICAL with a fix available. The pipeline refuses to publish. |
 | Are there long-lived credentials that could be stolen? | No. Azure access and signing both use short-lived OIDC tokens. There is no signing key and no cloud secret. |
@@ -52,7 +52,7 @@ Threat letters follow the [SLSA threat model](https://slsa.dev/spec/v1.0/threats
 | (E) Compromised dependency | Malicious PyPI release, repointed action tag | Hash-locked Python deps (`pip --require-hashes`); base image pinned by digest; every action pinned by commit SHA; Dependabot proposes updates as reviewable PRs | `requirements.lock`, `Dockerfile`, workflows |
 | (F) Upload modified package | Image replaced in the registry after build | Push by digest; cosign signature over the digest; consumers verify signer identity | `release.yml` |
 | (G) Registry compromise | Tag `latest` repointed | Nothing deploys by tag. GitOps manifests pin `@sha256:` digests (phase 6+) | `deploy/` |
-| (H) Use of a compromised package | Cluster runs an unsigned image | Kyverno `verifyImages` policy rejects images without a valid signature from `release.yml@refs/heads/main` | phase 9 |
+| (H) Use of a compromised package | Cluster runs an unsigned image | **Not yet enforced** (phase 9, deferred): Kyverno `verifyImages` would reject images without a valid signature from `release.yml@refs/heads/main`. Today: only digests merged through a reviewed deploy PR run | phase 9 |
 | Known vulnerabilities | Shipping a fixable CVE | Trivy gate on PR and again at release (new CVEs appear between merge and release); full report kept as evidence | `ci.yml`, `release.yml` |
 | Credential theft from CI | Exfiltrated cloud key | OIDC federation only; least-privilege identities per job; no signing keys | ADR-0003 |
 
@@ -154,8 +154,8 @@ Against [SLSA v1.0](https://slsa.dev/spec/v1.0/levels):
 | Gap | Risk | Plan |
 |---|---|---|
 | Build L3 | A compromised build step could forge provenance | Move build and attestation into a **reusable workflow**. Provenance then names that workflow as the builder, separate from the caller; verifiers pin `--signer-workflow` to it. |
-| Deploy-time enforcement | Until phase 9, a signature is checked in CI but not by the cluster | Kyverno `verifyImages` with keyless attestor and the identity above |
+| Deploy-time enforcement | Phase 9 is deferred: a signature is checked in CI but not by the cluster | Kyverno `verifyImages` with keyless attestor and the identity above |
 | Single maintainer, zero required approvals | Two-person review (SLSA Source track) not possible | Require one approval and CODEOWNERS review when a second maintainer joins |
 | Public registry and storage endpoints | Reachable from the internet; protected by Entra ID only | ACR Premium + private endpoint with self-hosted runners (ADR-0002/0003 risk acceptance expires 2027-04-30) |
-| Base image freshness | New CVEs in `python:3.13-slim` between releases | Dependabot docker updates. Scheduled rebuild-and-rescan of the deployed digest (phase 10) |
+| Base image freshness | New CVEs in `python:3.13-slim` between releases | Dependabot docker updates. A scheduled rebuild-and-rescan of the deployed digest is planned but not built |
 | Unfixed OS-package CVEs | The first release carried 164 findings (44 HIGH, 0 CRITICAL). All are in Debian 13 base packages with no fix published, mostly the util-linux family (`mount`, `login`, `libblkid1`, …). The Python dependencies have none. They are not reachable through the API's code paths, but they exist on disk | Tracked in each `release.json` as `unfixed` and kept apart from `fixable`, which the gate blocks. Evaluate a distroless Python base (no shell, no package manager, no util-linux) in a future ADR |
