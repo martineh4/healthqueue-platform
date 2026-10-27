@@ -184,8 +184,9 @@ gh codespace ssh -c $cs -- 'cd /workspaces/healthqueue-platform && deploy/script
 
 Expected: `sending ~5 req/s for 1800s`, then a count of status codes every 30 seconds. The
 traffic is bookings, lists, availability checks and unknown IDs, so you will see 200, 201, 404
-and a few 409s, and no 5xx. It runs inside the API pod, so it stops in scene 4 when the pod is
-replaced. That is expected, because the Grafana scene comes first.
+and a few 409s, and no 5xx. It waits until the API is ready before sending anything, so you can
+start it while the bootstrap is still running. It runs inside the API pod. When the pod is
+replaced in scene 4, it prints `lost healthqueue-api ...`, waits for the new pod and carries on.
 
 **Get the login passwords.** Run these in another terminal, or one you will close before
 recording, so the passwords are never on screen:
@@ -365,6 +366,7 @@ The talking points are suggestions; the actions are what matter.
 | `https://localhost:8080` does not load | Terminal A or B was closed, or the Codespace stopped. Restart both. If port 8080 is busy on the laptop, use `gh codespace ports forward 8081:8080 -c $cs` and `https://localhost:8081`. |
 | `http://localhost:3000` does not load | Terminal E or B was closed. Restart both. If port 3000 is busy on the laptop, use `3001:3000` in terminal B and `http://localhost:3001`. |
 | Grafana login fails | The password is per cluster. Get it again with the command in step 4. |
+| `RESTARTS` on the API pod goes up after resuming the Codespace | Expected. Stopping the Codespace stops the kind node, so every pod restarts once when it resumes (`SandboxChanged` in `kubectl describe pod`, last state exit 255, reason `Unknown`). A crash would show a non-zero app exit code or `OOMKilled`, with a `Back-off restarting` event. |
 | Grafana panels say **No data** | No traffic yet, or it stopped. Restart terminal F and wait 5 minutes. The SLI tiles need at least one `/v1` request in the window. |
 | Argo CD login fails | The password belongs to that cluster; get it again with the command in step 4. A new cluster has a new password. |
 | Argo CD shows the old version after merging | Click **Refresh** on the app. Polling takes up to 3 minutes. |
