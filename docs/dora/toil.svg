@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" viewBox="0 0 720 240" role="img">
+<title>Manual toil over 90 days</title>
+<desc>Hours of hands-on work by kind. Merging a deploy PR is the intended human decision (ADR-0007) and is not counted.</desc>
+<style>
+svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --s1: #2a78d6; --s2: #eb6834; --dim: #c3c2b7; }
+@media (prefers-color-scheme: dark) {
+  svg { --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --s1: #3987e5; --s2: #d95926; --dim: #4a4a46; }
+}
+text { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; fill: var(--ink-2); font-size: 12px; }
+.title { fill: var(--ink); font-size: 15px; font-weight: 600; }
+.value { fill: var(--ink); font-variant-numeric: tabular-nums; }
+.tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.grid { stroke: var(--grid); stroke-width: 1; }
+.axis { stroke: var(--axis); stroke-width: 1; }
+.ref { stroke: var(--ink-2); stroke-width: 1; }
+</style>
+<rect width="720" height="240" rx="8" fill="var(--surface)"/>
+<text class="title" x="20" y="30">Manual toil over 90 days</text>
+<line class="grid" x1="250" x2="250" y1="52" y2="206"/>
+<text class="tick" x="250" y="222" text-anchor="middle">0 h</text>
+<line class="grid" x1="350" x2="350" y1="52" y2="206"/>
+<text class="tick" x="350" y="222" text-anchor="middle">1 h</text>
+<line class="grid" x1="450" x2="450" y1="52" y2="206"/>
+<text class="tick" x="450" y="222" text-anchor="middle">2 h</text>
+<line class="grid" x1="550" x2="550" y1="52" y2="206"/>
+<text class="tick" x="550" y="222" text-anchor="middle">3 h</text>
+<line class="grid" x1="650" x2="650" y1="52" y2="206"/>
+<text class="tick" x="650" y="222" text-anchor="middle">4 h</text>
+<text x="240" y="75" text-anchor="end">revert a failed deployment</text>
+<path fill="var(--dim)" d="M250,62 H566 Q570,62 570,66 V76 Q570,80 566,80 H250 Z"/>
+<text class="value" x="576" y="75">3.2 h</text>
+<text x="240" y="105" text-anchor="end">approve held CI runs</text>
+<path fill="var(--s1)" d="M250,92 H502.7 Q506.7,92 506.7,96 V106 Q506.7,110 502.7,110 H250 Z"/>
+<text class="value" x="512.7" y="105">2.6 h</text>
+<text x="240" y="135" text-anchor="end">rerun failed release</text>
+<path fill="var(--dim)" d="M250,122 H296 Q300,122 300,126 V136 Q300,140 296,140 H250 Z"/>
+<text class="value" x="306" y="135">0.5 h</text>
+<text x="240" y="165" text-anchor="end">update stale deploy branch</text>
+<path fill="var(--dim)" d="M250,152 H281 Q285,152 285,156 V166 Q285,170 281,170 H250 Z"/>
+<text class="value" x="291" y="165">0.3 h</text>
+<text x="240" y="195" text-anchor="end">rotate kind pull secret</text>
+<path fill="var(--dim)" d="M250,182 H279.3 Q283.3,182 283.3,186 V196 Q283.3,200 279.3,200 H250 Z"/>
+<text class="value" x="289.3" y="195">0.3 h</text>
+<line class="axis" x1="250" x2="250" y1="52" y2="206"/>
+</svg>

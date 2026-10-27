@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="316" viewBox="0 0 720 316" role="img">
+<title>Deployments per week</title>
+<desc>Merged deploy pull requests per 7-day bin; the last bin is 6 days. The reference line is 7 a week, the elite boundary.</desc>
+<style>
+svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --s1: #2a78d6; --s2: #eb6834; --dim: #c3c2b7; }
+@media (prefers-color-scheme: dark) {
+  svg { --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --s1: #3987e5; --s2: #d95926; --dim: #4a4a46; }
+}
+text { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; fill: var(--ink-2); font-size: 12px; }
+.title { fill: var(--ink); font-size: 15px; font-weight: 600; }
+.value { fill: var(--ink); font-variant-numeric: tabular-nums; }
+.tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.grid { stroke: var(--grid); stroke-width: 1; }
+.axis { stroke: var(--axis); stroke-width: 1; }
+.ref { stroke: var(--ink-2); stroke-width: 1; }
+</style>
+<rect width="720" height="316" rx="8" fill="var(--surface)"/>
+<text class="title" x="20" y="30">Deployments per week</text>
+<line class="grid" x1="48" x2="700" y1="276" y2="276"/>
+<text class="tick" x="40" y="280" text-anchor="end">0</text>
+<line class="grid" x1="48" x2="700" y1="221" y2="221"/>
+<text class="tick" x="40" y="225" text-anchor="end">2</text>
+<line class="grid" x1="48" x2="700" y1="166" y2="166"/>
+<text class="tick" x="40" y="170" text-anchor="end">4</text>
+<line class="grid" x1="48" x2="700" y1="111" y2="111"/>
+<text class="tick" x="40" y="115" text-anchor="end">6</text>
+<line class="grid" x1="48" x2="700" y1="56" y2="56"/>
+<text class="tick" x="40" y="60" text-anchor="end">8</text>
+<path fill="var(--s1)" d="M61.1,276 V115 Q61.1,111 65.1,111 H81.1 Q85.1,111 85.1,115 V276 Z"/>
+<text class="value" x="73.1" y="105" text-anchor="middle">6</text>
+<text class="tick" x="73.1" y="294" text-anchor="middle">Jul 28</text>
+<path fill="var(--s1)" d="M111.2,276 V87.5 Q111.2,83.5 115.2,83.5 H131.2 Q135.2,83.5 135.2,87.5 V276 Z"/>
+<text class="value" x="123.2" y="77.5" text-anchor="middle">7</text>
+<text class="tick" x="123.2" y="294" text-anchor="middle">Aug 4</text>
+<path fill="var(--s1)" d="M161.4,276 V170 Q161.4,166 165.4,166 H181.4 Q185.4,166 185.4,170 V276 Z"/>
+<text class="value" x="173.4" y="160" text-anchor="middle">4</text>
+<text class="tick" x="173.4" y="294" text-anchor="middle">Aug 11</text>
+<path fill="var(--s1)" d="M211.5,276 V115 Q211.5,111 215.5,111 H231.5 Q235.5,111 235.5,115 V276 Z"/>
+<text class="value" x="223.5" y="105" text-anchor="middle">6</text>
+<text class="tick" x="223.5" y="294" text-anchor="middle">Aug 18</text>
+<path fill="var(--s1)" d="M261.7,276 V142.5 Q261.7,138.5 265.7,138.5 H281.7 Q285.7,138.5 285.7,142.5 V276 Z"/>
+<text class="value" x="273.7" y="132.5" text-anchor="middle">5</text>
+<text class="tick" x="273.7" y="294" text-anchor="middle">Aug 25</text>
+<path fill="var(--s1)" d="M311.8,276 V170 Q311.8,166 315.8,166 H331.8 Q335.8,166 335.8,170 V276 Z"/>
+<text class="value" x="323.8" y="160" text-anchor="middle">4</text>
+<text class="tick" x="323.8" y="294" text-anchor="middle">Sep 1</text>
+<path fill="var(--s1)" d="M362,276 V142.5 Q362,138.5 366,138.5 H382 Q386,138.5 386,142.5 V276 Z"/>
+<text class="value" x="374" y="132.5" text-anchor="middle">5</text>
+<text class="tick" x="374" y="294" text-anchor="middle">Sep 8</text>
+<path fill="var(--s1)" d="M412.2,276 V115 Q412.2,111 416.2,111 H432.2 Q436.2,111 436.2,115 V276 Z"/>
+<text class="value" x="424.2" y="105" text-anchor="middle">6</text>
+<text class="tick" x="424.2" y="294" text-anchor="middle">Sep 15</text>
+<path fill="var(--s1)" d="M462.3,276 V142.5 Q462.3,138.5 466.3,138.5 H482.3 Q486.3,138.5 486.3,142.5 V276 Z"/>
+<text class="value" x="474.3" y="132.5" text-anchor="middle">5</text>
+<text class="tick" x="474.3" y="294" text-anchor="middle">Sep 22</text>
+<path fill="var(--s1)" d="M512.5,276 V197.5 Q512.5,193.5 516.5,193.5 H532.5 Q536.5,193.5 536.5,197.5 V276 Z"/>
+<text class="value" x="524.5" y="187.5" text-anchor="middle">3</text>
+<text class="tick" x="524.5" y="294" text-anchor="middle">Sep 29</text>
+<path fill="var(--s1)" d="M562.6,276 V197.5 Q562.6,193.5 566.6,193.5 H582.6 Q586.6,193.5 586.6,197.5 V276 Z"/>
+<text class="value" x="574.6" y="187.5" text-anchor="middle">3</text>
+<text class="tick" x="574.6" y="294" text-anchor="middle">Oct 6</text>
+<path fill="var(--s1)" d="M612.8,276 V115 Q612.8,111 616.8,111 H632.8 Q636.8,111 636.8,115 V276 Z"/>
+<text class="value" x="624.8" y="105" text-anchor="middle">6</text>
+<text class="tick" x="624.8" y="294" text-anchor="middle">Oct 13</text>
+<path fill="var(--s1)" d="M662.9,276 V170 Q662.9,166 666.9,166 H682.9 Q686.9,166 686.9,170 V276 Z"/>
+<text class="value" x="674.9" y="160" text-anchor="middle">4</text>
+<text class="tick" x="674.9" y="294" text-anchor="middle">Oct 20</text>
+<line class="axis" x1="48" x2="700" y1="276" y2="276"/>
+<line class="ref" x1="48" x2="700" y1="83.5" y2="83.5"/>
+<text x="700" y="77.5" text-anchor="end">7 a week: once a day, the elite boundary</text>
+</svg>

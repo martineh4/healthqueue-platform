@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="234" viewBox="0 0 720 234" role="img">
+<title>Failed deployment recovery time</title>
+<desc>Minutes from the failed deployment running to the revert running, per failure. The reference line is one hour, the elite boundary.</desc>
+<style>
+svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --s1: #2a78d6; --s2: #eb6834; --dim: #c3c2b7; }
+@media (prefers-color-scheme: dark) {
+  svg { --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --s1: #3987e5; --s2: #d95926; --dim: #4a4a46; }
+}
+text { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; fill: var(--ink-2); font-size: 12px; }
+.title { fill: var(--ink); font-size: 15px; font-weight: 600; }
+.value { fill: var(--ink); font-variant-numeric: tabular-nums; }
+.tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.grid { stroke: var(--grid); stroke-width: 1; }
+.axis { stroke: var(--axis); stroke-width: 1; }
+.ref { stroke: var(--ink-2); stroke-width: 1; }
+</style>
+<rect width="720" height="234" rx="8" fill="var(--surface)"/>
+<text class="title" x="20" y="30">Failed deployment recovery time</text>
+<rect x="20" y="50" width="10" height="10" rx="2" fill="var(--s1)"/>
+<text x="36" y="59">Paged (fast-burn alert)</text>
+<rect x="205" y="50" width="10" height="10" rx="2" fill="var(--s2)"/>
+<text x="221" y="59">Ticket (slow-burn alert)</text>
+<line class="grid" x1="250" x2="250" y1="76" y2="200"/>
+<text class="tick" x="250" y="216" text-anchor="middle">0 min</text>
+<line class="grid" x1="350" x2="350" y1="76" y2="200"/>
+<text class="tick" x="350" y="216" text-anchor="middle">50 min</text>
+<line class="grid" x1="450" x2="450" y1="76" y2="200"/>
+<text class="tick" x="450" y="216" text-anchor="middle">100 min</text>
+<line class="grid" x1="550" x2="550" y1="76" y2="200"/>
+<text class="tick" x="550" y="216" text-anchor="middle">150 min</text>
+<line class="grid" x1="650" x2="650" y1="76" y2="200"/>
+<text class="tick" x="650" y="216" text-anchor="middle">200 min</text>
+<text x="240" y="99" text-anchor="end">D001 latency regression</text>
+<path fill="var(--s1)" d="M250,86 H332.1 Q336.1,86 336.1,90 V100 Q336.1,104 332.1,104 H250 Z"/>
+<text class="value" x="342.1" y="99">43 min</text>
+<text x="240" y="129" text-anchor="end">D006 startup crash</text>
+<path fill="var(--s1)" d="M250,116 H316.1 Q320.1,116 320.1,120 V130 Q320.1,134 316.1,134 H250 Z"/>
+<text class="value" x="326.1" y="129">35 min</text>
+<text x="240" y="159" text-anchor="end">D011 latency regression</text>
+<path fill="var(--s1)" d="M250,146 H324.1 Q328.1,146 328.1,150 V160 Q328.1,164 324.1,164 H250 Z"/>
+<text class="value" x="334.1" y="159">39 min</text>
+<text x="240" y="189" text-anchor="end">D034 errors on one route</text>
+<path fill="var(--s2)" d="M250,176 H453.7 Q457.7,176 457.7,180 V190 Q457.7,194 453.7,194 H250 Z"/>
+<text class="value" x="463.7" y="189">104 min</text>
+<line class="axis" x1="250" x2="250" y1="76" y2="200"/>
+<line class="ref" x1="370" x2="370" y1="72" y2="200"/>
+<text x="374" y="68">1 hour</text>
+</svg>

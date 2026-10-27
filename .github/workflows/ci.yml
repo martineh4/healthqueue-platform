@@ -57,6 +57,15 @@ jobs:
       - name: Tests with coverage gate
         run: pytest --cov-report=xml --junitxml=junit.xml
 
+      # Phase 11: standard library only, linted with the tools installed above. The tests also
+      # regenerate the data, report and charts and fail if the committed files differ.
+      - name: DORA analysis (lint, tests, committed outputs current)
+        working-directory: dora
+        run: |
+          ruff check --output-format=github .
+          ruff format --check .
+          python -m pytest -p no:cacheprovider
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

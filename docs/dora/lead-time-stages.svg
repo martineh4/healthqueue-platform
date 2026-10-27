@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" viewBox="0 0 720 240" role="img">
+<title>Where the lead time goes</title>
+<desc>Share of all commit-to-production time spent in each stage, across every change.</desc>
+<style>
+svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --s1: #2a78d6; --s2: #eb6834; --dim: #c3c2b7; }
+@media (prefers-color-scheme: dark) {
+  svg { --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --s1: #3987e5; --s2: #d95926; --dim: #4a4a46; }
+}
+text { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; fill: var(--ink-2); font-size: 12px; }
+.title { fill: var(--ink); font-size: 15px; font-weight: 600; }
+.value { fill: var(--ink); font-variant-numeric: tabular-nums; }
+.tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.grid { stroke: var(--grid); stroke-width: 1; }
+.axis { stroke: var(--axis); stroke-width: 1; }
+.ref { stroke: var(--ink-2); stroke-width: 1; }
+</style>
+<rect width="720" height="240" rx="8" fill="var(--surface)"/>
+<text class="title" x="20" y="30">Where the lead time goes</text>
+<line class="grid" x1="250" x2="250" y1="52" y2="206"/>
+<text class="tick" x="250" y="222" text-anchor="middle">0%</text>
+<line class="grid" x1="350" x2="350" y1="52" y2="206"/>
+<text class="tick" x="350" y="222" text-anchor="middle">20%</text>
+<line class="grid" x1="450" x2="450" y1="52" y2="206"/>
+<text class="tick" x="450" y="222" text-anchor="middle">40%</text>
+<line class="grid" x1="550" x2="550" y1="52" y2="206"/>
+<text class="tick" x="550" y="222" text-anchor="middle">60%</text>
+<line class="grid" x1="650" x2="650" y1="52" y2="206"/>
+<text class="tick" x="650" y="222" text-anchor="middle">80%</text>
+<text x="240" y="75" text-anchor="end">Code review and PR checks</text>
+<path fill="var(--dim)" d="M250,62 H383.5 Q387.5,62 387.5,66 V76 Q387.5,80 383.5,80 H250 Z"/>
+<text class="value" x="393.5" y="75">27%</text>
+<text x="240" y="105" text-anchor="end">Release: build, scan, sign</text>
+<path fill="var(--dim)" d="M250,92 H274 Q278,92 278,96 V106 Q278,110 274,110 H250 Z"/>
+<text class="value" x="284" y="105">6%</text>
+<text x="240" y="135" text-anchor="end">Waiting for the approval click</text>
+<path fill="var(--s1)" d="M250,122 H459.3 Q463.3,122 463.3,126 V136 Q463.3,140 459.3,140 H250 Z"/>
+<text class="value" x="469.3" y="135">43%</text>
+<text x="240" y="165" text-anchor="end">Deploy PR checks and merge</text>
+<path fill="var(--dim)" d="M250,152 H366.2 Q370.2,152 370.2,156 V166 Q370.2,170 366.2,170 H250 Z"/>
+<text class="value" x="376.2" y="165">24%</text>
+<text x="240" y="195" text-anchor="end">Argo CD sync and rollout</text>
+<path fill="var(--dim)" d="M250,182 H250 Q251,182 251,183 V199 Q251,200 250,200 H250 Z"/>
+<text class="value" x="257" y="195">0.2%</text>
+<line class="axis" x1="250" x2="250" y1="52" y2="206"/>
+</svg>

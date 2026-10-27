@@ -3,14 +3,16 @@
 Reference DevOps architecture for the HealthQueue patient appointment scheduling API:
 CI/CD with supply-chain security, OpenTofu on Azure, and GitOps delivery to Kubernetes via Argo CD.
 
-> Status: work in progress. Phases 0–8 and 10 are complete: API and tests, PR pipeline, encrypted
+> Status: work in progress. Phases 0–8, 10 and 11 are complete: API and tests, PR pipeline, encrypted
 > remote state, PR-driven infrastructure delivery with OIDC, a signed, attested release
 > pipeline ([supply chain and SLSA](docs/supply-chain-slsa.md)), hardened Kustomize
 > manifests ([deploy/](deploy/README.md)), GitOps delivery with Argo CD on kind
 > ([evidence](docs/evidence/phase-7-argocd.md)), and a deploy pull request for every verified
 > release ([ADR-0007](docs/adr/0007-pr-driven-image-promotion.md)), and SLOs with burn-rate
 > alerts and a Grafana dashboard ([observability](docs/observability.md),
-> [evidence](docs/evidence/phase-10-observability.md)). Live walkthrough:
+> [evidence](docs/evidence/phase-10-observability.md)), and DORA metrics from 90 days of
+> synthetic deployments, with the toil to remove first ([DORA report](docs/dora-report.md)).
+> Live walkthrough:
 > [demo-day guide](docs/demo-day.md).
 
 ## Repository layout
@@ -22,7 +24,7 @@ CI/CD with supply-chain security, OpenTofu on Azure, and GitOps delivery to Kube
 | `infra/` | OpenTofu: state bootstrap, Azure modules, `prod` environment |
 | `deploy/` | Kustomize base/overlays and Argo CD applications |
 | `observability/` | The API's scrape config, SLO recording rules, burn-rate alerts (with promtool tests) and Grafana dashboard ([docs](docs/observability.md)) |
-| `dora/` | Synthetic 90-day deployment data generator and analysis |
+| `dora/` | Seeded 90-day deployment simulation, DORA metrics and charts ([report](docs/dora-report.md)) |
 | `docs/` | Architecture, ADRs, runbooks, SLO, SLSA, and DORA reports |
 | `.devcontainer/` | Codespace with Docker, kind, Argo CD, OpenTofu, cosign, Trivy, Syft |
 
