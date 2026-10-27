@@ -91,7 +91,7 @@ feeds synthetic metrics through the real rules, and CI's `manifests` check runs
 | `http_requests_total{method, route, status}` | The API | `route` is the route template (`/v1/appointments/{appointment_id}`), never the raw path: bounded cardinality, no IDs in metrics |
 | `http_request_duration_seconds` | The API | Buckets 25 ms … 5 s, with one at the 300 ms SLO threshold |
 | `healthqueue_appointments_booked_total`, `_booking_conflicts_total`, `_appointments_cancelled_total` | The API | Business events |
-| `argocd_app_info{sync_status, health_status}` | Argo CD | Delivery health; also used for DORA (phase 11) |
+| `argocd_app_info{sync_status, health_status}` | Argo CD | Delivery health; a source for DORA on live data (phase 11 used synthetic data, [DORA report](dora-report.md)) |
 | Kubernetes object state | kube-state-metrics | Restarts, replicas, image of each pod |
 | Logs | The API, JSON on stdout | Request ID, route template, status, duration. No bodies or query strings, which may hold PHI. Read with `kubectl logs`; a log store is out of scope on kind |
 

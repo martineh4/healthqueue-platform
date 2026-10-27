@@ -12,7 +12,7 @@
 
 ## 1. Look at the application (2 minutes)
 
-Open the Argo CD UI ([demo-day guide, step 4](../demo-day.md#4-open-the-argo-cd-ui-in-your-browser))
+Open the Argo CD UI ([demo-day guide, step 4](../demo-day.md#4-open-argo-cd-and-grafana-in-your-browser))
 and select the application, or:
 
 ```bash
@@ -46,4 +46,5 @@ Open the resource tree in the UI and find the red resource; its events usually s
 ## Afterwards
 
 Argo CD's history (the application's **History and rollback** tab) shows which revision
-synced when. Note the time to recovery; DORA's time to restore (phase 11) uses it.
+synced when. Note the time to recovery: a DORA analysis of real deployments would use it
+(the [DORA report](../dora-report.md) explains how to run one; phase 11 used synthetic data).

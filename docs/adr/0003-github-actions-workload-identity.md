@@ -121,6 +121,9 @@ block in `envs/prod`, so nothing was recreated.
   any subject, and grant it `AcrPush`.** That is the price of letting the environment manage its
   own workload identities. The condition caps the possible damage at pushing images, which still
   need a valid signature to deploy (phase 9).
+  *Amended 2026-10-26:* phase 9 is deferred, so the cluster does not check signatures yet. Until
+  it does, the control is that production runs only a digest merged through a reviewed deploy
+  pull request (ADR-0007).
 - **PR plans skip locking.** A PR plan can read state mid-apply and show a stale diff. It cannot
   cause damage because it can write nothing.
 - **Dependabot PRs get no plan.** GitHub does not expose Actions secrets to Dependabot. Provider
