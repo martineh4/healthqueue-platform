@@ -4,19 +4,21 @@ Step-by-step script for recording the live demo:
 
 - the cluster running in a Codespace;
 - the Argo CD web UI in your browser;
+- the HealthQueue SLO dashboard in Grafana;
 - a pull request (PR) merge rolling out a new signed image;
 - Argo CD repairing a manual change on camera.
 
 Every command here was run end to end on 2026-10-26 (see
-[phase 8 evidence](evidence/phase-8-deploy-pr.md)).
+[phase 8 evidence](evidence/phase-8-deploy-pr.md); Grafana:
+[phase 10 evidence](evidence/phase-10-observability.md)).
 
 | When | What | Time |
 |---|---|---|
 | Before recording | [1. Start the Codespace](#1-start-the-codespace) | 5–10 min |
 | | [2. Bring the cluster back](#2-bring-the-cluster-back) | 1–5 min |
 | | [3. Prepare a release to deploy](#3-prepare-a-release-to-deploy) | about 10 min, mostly waiting |
-| | [4. Open the Argo CD UI](#4-open-the-argo-cd-ui-in-your-browser) and [5. Set up the terminals](#5-set-up-the-on-camera-terminals) | 3 min |
-| On camera | [6. Recording script](#6-recording-script) | 5–8 min |
+| | [4. Open Argo CD and Grafana](#4-open-argo-cd-and-grafana-in-your-browser) and [5. Set up the terminals](#5-set-up-the-on-camera-terminals) | 5 min, at least 10 min before recording |
+| On camera | [6. Recording script](#6-recording-script) | 7–10 min |
 | Afterwards | [7. Shut down](#7-shut-down) | 1 min |
 
 **Conventions**
@@ -95,14 +97,17 @@ az acr token credential generate -r crhealthqueueora3w -n kind-pull --password1 
 
 Expected: `healthqueue/acr-pull: token kind-pull, expires <date> (29 days left)`.
 
-Done when the bootstrap ends with all three applications `Synced` and `Healthy`:
+Done when the bootstrap ends with all four applications `Synced` and `Healthy`:
 
 ```
 NAME              SYNC STATUS   HEALTH STATUS
 argocd            Synced        Healthy
 healthqueue-api   Synced        Healthy
+monitoring        Synced        Healthy
 root              Synced        Healthy
 ```
+
+On a new cluster the monitoring stack's first install takes a few minutes more.
 
 ### 3. Prepare a release to deploy
 
@@ -140,9 +145,10 @@ Then:
    ([ADR-0007](adr/0007-pr-driven-image-promotion.md)).
 4. Wait for every check to turn green (about 2 minutes). **Do not merge yet.**
 
-### 4. Open the Argo CD UI in your browser
+### 4. Open Argo CD and Grafana in your browser
 
-You need two laptop terminals. Leave both running for the whole recording.
+You need four laptop terminals, A, B, E and F. Leave them running for the whole recording.
+Set `$cs` in each first (step 1).
 
 **Terminal A:** port-forward to Argo CD inside the Codespace.
 
@@ -152,20 +158,45 @@ gh codespace ssh -c $cs -- 'kubectl -n argocd port-forward svc/argocd-server 808
 
 Expected: `Forwarding from 127.0.0.1:8080 -> 8080`.
 
-**Terminal B:** tunnel that port to your laptop. Set `$cs` first (step 1).
+**Terminal E:** port-forward to Grafana inside the Codespace.
 
 ```powershell
-gh codespace ports forward 8080:8080 -c $cs
+gh codespace ssh -c $cs -- 'kubectl -n monitoring port-forward svc/kps-grafana 3000:80'
 ```
 
-Expected: `Forwarding ports: remote 8080 <=> local 8080`.
+Expected: `Forwarding from 127.0.0.1:3000 -> 3000`.
 
-**Get the login password.** Run this in a third terminal, or one you will close before
-recording, so the password is never on screen:
+**Terminal B:** tunnel both ports to your laptop.
+
+```powershell
+gh codespace ports forward 8080:8080 3000:3000 -c $cs
+```
+
+Expected: `Forwarding ports: remote 3000 <=> local 3000` and the same line for 8080.
+
+**Terminal F:** demo traffic, so the dashboard has data. Start it **at least 10 minutes
+before recording**: the burn-rate panels need 5 minutes of data, and the panels refresh every
+30 seconds.
+
+```powershell
+gh codespace ssh -c $cs -- 'cd /workspaces/healthqueue-platform && deploy/scripts/generate-traffic.sh 1800 5'
+```
+
+Expected: `sending ~5 req/s for 1800s`, then a count of status codes every 30 seconds. The
+traffic is bookings, lists, availability checks and unknown IDs, so you will see 200, 201, 404
+and a few 409s, and no 5xx. It runs inside the API pod, so it stops in scene 4 when the pod is
+replaced. That is expected, because the Grafana scene comes first.
+
+**Get the login passwords.** Run these in another terminal, or one you will close before
+recording, so the passwords are never on screen:
 
 ```powershell
 gh codespace ssh -c $cs -- 'argocd admin initial-password -n argocd | head -1'
+gh codespace ssh -c $cs -- 'kubectl -n monitoring get secret grafana-admin -o jsonpath={.data.admin-password} | base64 -d; echo'
 ```
+
+The first is Argo CD's, and the second is Grafana's. Both are generated per cluster and never
+stored in Git.
 
 **Browser:**
 
@@ -184,6 +215,14 @@ Tidy the view for the camera:
 
 If Codespaces pops up "Your application running on port 8080 is available", ignore it. That
 browser link cannot speak to Argo CD's HTTPS port; use `https://localhost:8080`.
+
+**Grafana**, in a third browser tab:
+
+1. Go to **http://localhost:3000/d/healthqueue-slo?from=now-30m&to=now**. Grafana is plain
+   HTTP here, because the tunnel is already encrypted.
+2. Log in as `admin` with the Grafana password above. The **HealthQueue SLOs** dashboard
+   opens. It also appears under **Dashboards**.
+3. Set the browser zoom so the top row of SLO tiles and both burn-rate graphs fit on screen.
 
 ### 5. Set up the on-camera terminals
 
@@ -210,6 +249,8 @@ kubectl -n healthqueue scale deploy/healthqueue-api --replicas=0
 Final check before you start:
 
 - the browser shows Argo CD with everything **Synced / Healthy**;
+- Grafana's **Requests per second** graph shows traffic, and both burn-rate graphs have
+  lines;
 - the deploy PR's checks are green;
 - terminal C prints the old version.
 
@@ -221,16 +262,41 @@ The talking points are suggestions; the actions are what matter.
 
 **Scene 1: what is running (1 min)**
 
-- **Show:** Argo CD's **Applications** page with three apps, all Synced and Healthy.
+- **Show:** Argo CD's **Applications** page with four apps, all Synced and Healthy.
 - **Say:**
   - "Argo CD runs inside the cluster and pulls from Git. No CI system has credentials to
     this cluster."
-  - "`root` is the app of apps; `argocd` manages Argo CD itself."
+  - "`root` is the app of apps; `argocd` manages Argo CD itself, and `monitoring` is the
+    Prometheus and Grafana stack."
 - Open **healthqueue-api** and point at the Pod.
 - **Say:** "This image is pinned by digest, signed with cosign, and has SLSA provenance."
 - Point at terminal C: it shows version 0.1.0 and the old commit.
 
-**Scene 2: a release is a pull request (2 min)**
+**Scene 2: how we know it is healthy (2 min)**
+
+- Switch to the Grafana tab, showing **HealthQueue SLOs**.
+- **Show the top row:** the availability SLI, the latency SLI and the error budget left for
+  each.
+- **Say:**
+  - "Two SLOs over 30 days: 99.5% of API requests succeed, and 99% are served within 300
+    milliseconds."
+  - "99.5% and not higher, because this is one SQLite replica, and every deploy costs a few
+    seconds. A promise the architecture can't keep would only produce noise."
+- **Show** the two **burn rate** graphs.
+- **Say:**
+  - "We don't page on an error spike. We page when the error budget is being spent fast:
+    14.4 times the sustainable rate over both an hour and five minutes."
+  - "The alert rules have unit tests. CI feeds them synthetic outages and fails the pull
+    request if an alert doesn't fire."
+- **Show** **Requests per second by route and status**: 201 bookings, a few 409 clashes, and
+  404s.
+- **Say:** "Clashes and unknown IDs are correct answers, so they don't spend budget. Only 5xx
+  and slow responses do."
+- **Show** **What is deployed**: the image digest, and every Argo CD application's state.
+- **Say:** "This dashboard is code. It's provisioned from Git and changed through pull
+  requests like everything else."
+
+**Scene 3: a release is a pull request (2 min)**
 
 - Switch to the deploy PR tab.
 - **Show:**
@@ -241,7 +307,7 @@ The talking points are suggestions; the actions are what matter.
   Nothing reaches production without a reviewed merge."
 - Show the green checks, then click **Rebase and merge**.
 
-**Scene 3: GitOps rollout (1–3 min)**
+**Scene 4: GitOps rollout (1–3 min)**
 
 - Back in Argo CD, on **healthqueue-api**, click **Refresh**. (Argo CD also polls on its
   own, within 3 minutes.)
@@ -252,7 +318,7 @@ The talking points are suggestions; the actions are what matter.
 - Terminal C briefly shows `(no ready pod)`, then `{"version":"0.2.0","commit":"<new commit>"}`.
 - **Say:** "Merge is the deployment, and rollback is reverting that merge."
 
-**Scene 4: self-healing (1 min)**
+**Scene 5: self-healing (1 min)**
 
 - **Say:** "What if someone changes production by hand?"
 - In terminal D, run the pre-typed `kubectl ... --replicas=0`.
@@ -261,7 +327,7 @@ The talking points are suggestions; the actions are what matter.
 - **Say:** "Git is the source of truth; manual drift is reverted automatically and shows in
   the app's history."
 
-**Optional scene 5: rollback (2–3 min)**
+**Optional scene 6: rollback (2–3 min)**
 
 - On the merged deploy PR, click **Revert**, then create the PR. Your account opens this
   one, so CI runs without the approval click.
@@ -272,7 +338,7 @@ The talking points are suggestions; the actions are what matter.
 
 ## 7. Shut down
 
-1. Press `Ctrl+C` in terminals A, B, C and D.
+1. Press `Ctrl+C` in terminals A to F.
 2. Stop the Codespace so it stops using hours. **Laptop:**
 
    ```powershell
@@ -297,6 +363,9 @@ The talking points are suggestions; the actions are what matter.
 | Deploy PR says the branch is out of date | Something merged after it. Click **Update branch**, wait for the checks, then merge. |
 | No deploy PR appeared | Check the **Release** run. `open-deploy-pr` prints "already what main deploys" if the digest did not change. The release only runs for changes under `app/`. |
 | `https://localhost:8080` does not load | Terminal A or B was closed, or the Codespace stopped. Restart both. If port 8080 is busy on the laptop, use `gh codespace ports forward 8081:8080 -c $cs` and `https://localhost:8081`. |
+| `http://localhost:3000` does not load | Terminal E or B was closed. Restart both. If port 3000 is busy on the laptop, use `3001:3000` in terminal B and `http://localhost:3001`. |
+| Grafana login fails | The password is per cluster. Get it again with the command in step 4. |
+| Grafana panels say **No data** | No traffic yet, or it stopped. Restart terminal F and wait 5 minutes. The SLI tiles need at least one `/v1` request in the window. |
 | Argo CD login fails | The password belongs to that cluster; get it again with the command in step 4. A new cluster has a new password. |
 | Argo CD shows the old version after merging | Click **Refresh** on the app. Polling takes up to 3 minutes. |
 | `kubectl ... connection refused` right after resuming | The node is still starting. Re-run the bootstrap; it waits for the API server. |
