@@ -1,9 +1,10 @@
 # ADR-0007: Pull-request-driven image promotion
 
-- **Status:** Accepted
+- **Status:** Accepted; amended 2026-10-26 with the measured cost of the approval click (below)
 - **Date:** 2026-10-26
 - **Deciders:** Platform engineering; informed: CTO
 - **Related:** [ADR-0006](0006-gitops-with-argo-cd.md), [supply chain and SLSA](../supply-chain-slsa.md),
+  [DORA report](../dora-report.md),
   [`release.yml`](../../.github/workflows/release.yml), [`open-deploy-pr.sh`](../../.github/scripts/open-deploy-pr.sh)
 
 ## Context
@@ -57,6 +58,25 @@ Every push to the bot branch (a newer release) needs the approval again.
 The deploy procedure is therefore: **approve workflows → checks pass → merge.** The approval
 is also a deliberate human decision before bot-authored changes run in CI.
 
+### The approval click is a control (amended 2026-10-26)
+
+The click is kept on purpose. It is not friction left over from the implementation.
+
+- **What it guarantees:** a human decides before bot-authored changes run in CI. The merge
+  remains the separate, human approval of the production change.
+- **Why it was chosen:** with one maintainer, an extra click per deploy was preferred to
+  registering a GitHub App and protecting its private key.
+
+**Its cost, measured in phase 11** ([DORA report](../dora-report.md); synthetic data
+modelling this procedure):
+
+- **Lead time:** waiting for the click is the largest stage, 42.7% of all
+  commit-to-production time.
+- **Clicks:** 77 in 90 days.
+
+The decision stands. The report frames the GitHub App not as a fix but as a trade: give up
+this control for speed. Make that trade when either trigger under **Revisit when** applies.
+
 *What did not work (2026-10-26):* dispatching `ci.yml` and `infra.yml` on the bot branch with
 `workflow_dispatch`, the one event `GITHUB_TOKEN` may trigger. The runs passed on the pull
 request's head commit, but GitHub does not count `workflow_dispatch` results toward a pull
@@ -89,7 +109,8 @@ pull requests. It has no effect today, because branch protection requires zero a
   second maintainer joins and branch protection requires a review, a workflow could approve
   its own pull request. At that point, switch to a GitHub App token (below) and turn the
   setting off.
-- **One extra click per deploy:** approving the held CI runs. A GitHub App token removes it.
+- **One extra click per deploy:** approving the held CI runs. It is a control and is kept on
+  purpose (above), but it is the largest stage of lead time. A GitHub App token removes it.
 - **Deploy pull requests can go stale.** Strict branch protection requires the branch to be
   up to date with `main`. If `main` moves, use **Update branch** on the pull request, or let
   the next release rebuild the branch from `main`.
@@ -107,6 +128,8 @@ pull requests. It has no effect today, because branch protection requires zero a
 
 ## Revisit when
 
+- Lead time becomes a target (added 2026-10-26). Waiting for the approval click is the largest
+  stage of lead time (phase 11), and a GitHub App token removes it while the merge stays human.
 - A second maintainer joins or reviews become required: switch to a GitHub App and disable
   "Allow GitHub Actions to create and approve pull requests".
 - A staging environment exists: promote to staging automatically, and to prod by pull request

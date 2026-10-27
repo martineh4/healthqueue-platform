@@ -34,8 +34,9 @@ Benchmarks: *Accelerate State of DevOps Report 2024*, "Performance levels" (page
 rates do not rank the levels (medium 10%, high 20%), so a rate between 5% and 20% can only be
 called "high or medium".
 
-- **Lead time:** elite (median 4 h 40 min), even though 42.7% of all
-  commit-to-production time is spent waiting for one click.
+- **Lead time:** elite (median 4 h 40 min). 42.7% of all commit-to-production time is
+  spent waiting for the approval click, a deliberate control (ADR-0007), not an accident of
+  the pipeline.
 - **Recovery:** elite (median 41 min).
 - **Change failure rate:** 6.2%, just above elite's 5%. That is one failure away
   from elite, and too few failures to rank on alone.
@@ -132,7 +133,8 @@ slowest changes were all committed on a Friday and shipped the following Monday.
 | Argo CD sync and rollout | 2.7 h | 0.2% |
 
 - **Waiting for the approval click: 42.7%**, the largest share. It is the wait between a
-  deploy PR being ready and the maintainer's next check-in.
+  deploy PR being ready and the maintainer's next check-in. The click is a chosen control:
+  see [recommendation 1](#1-decide-when-to-trade-the-approval-click-for-speed).
 - **Deploy PR checks and merge: 24.0%.** This includes a second check-in whenever the
   maintainer did not wait at the keyboard for the 2-minute checks.
 - **Argo CD sync and rollout: 0.2%** (2.7 h in total).
@@ -169,27 +171,55 @@ slowest changes were all committed on a Friday and shipped the following Monday.
 | update stale deploy branch | 21 | 5.0% |
 | rotate kind pull secret | 20 | 4.8% |
 
-7.0 h in 90 days. Merging the deploy PR is not counted: it is the deliberate human
-approval of a production change (ADR-0007). Reverts include a 30-minute review of each
-failure.
+7.0 h in 90 days. Reverts include a 30-minute review of each failure.
+
+- **Merging the deploy PR is not counted.** It is the deliberate human approval of a
+  production change (ADR-0007).
+- **Approving held CI runs is counted,** because it is repeated hands-on work. It is also a
+  control, though, so whether to remove it is a decision (recommendation 1), not a cleanup.
 
 ## Recommendations, in order
 
 Each recommendation names the number it rests on, from the baseline data above. The
 projection reruns the same seed with only that change.
 
-### 1. Open deploy PRs with a GitHub App token
+### 1. Decide when to trade the approval click for speed
 
 **The number: 42.7% of all lead time, and 77 approval clicks.**
 
-- **Why:** CI on a deploy PR opened with `GITHUB_TOKEN` is held until the maintainer approves
-  it. The wait for that click is the largest stage of lead time.
-- **The clicks:** 154 min of toil for 64 deployments. 13 of
-  them were approvals again, after a newer release replaced the deploy PR's head.
-- **The fix:** ADR-0007 already names it as the production path. A GitHub App token gives
-  the bot its own identity, and its pull requests' CI runs without the click.
+**The click is a deliberate control, not a defect.** A deploy PR opened with `GITHUB_TOKEN` gets
+its CI runs held until the maintainer clicks **Approve workflows to run**. ADR-0007 kept that
+hold on purpose:
 
-**Projected:**
+- **What it guarantees:** a human decides before bot-authored changes run in CI.
+- **Why it was chosen:** with one maintainer, the maintainer preferred an extra click to
+  registering and securing a GitHub App.
+
+The question is when its cost outweighs that control.
+
+**What it costs:**
+
+- **Lead time:** waiting for the click is the largest stage, 42.7%.
+- **Clicks:** 77 of them, 154 min of hands-on time for 64
+  deployments. 13 were approvals again, after a newer release replaced the deploy
+  PR's head.
+
+**What a GitHub App token changes** (ADR-0007's production path):
+
+- **Removed:** the click. The bot's pull requests run CI as soon as they are opened, under the
+  bot's own identity.
+- **Kept:** the merge. No change reaches production without a human approving it.
+- **Added:** a private key stored as a secret, which needs protecting and rotating.
+
+**When to make the trade** (ADR-0007, amended with this report). Make it when either of these
+happens:
+
+- a second maintainer joins, or reviews become required (ADR-0007's original trigger);
+- lead time becomes a target. The 90th percentile is 2.8 days today.
+
+Until then, keeping the click is a reasonable choice.
+
+**Projected, if the trade is made:**
 
 - median lead time 4 h 40 min → **3 h 20 min**; 90th percentile 2.8 days →
   **18 h 29 min**;
