@@ -16,7 +16,10 @@ updates:
     schedule: { interval: weekly }
     groups:
       actions: { patterns: ["*"] }
-  # Both OpenTofu root modules pin providers in a lock file.
+  # infra/bootstrap only. infra/envs/prod is left out on purpose: Dependabot's updater runs
+  # Terraform, which cannot parse that module's OpenTofu state `encryption` block ("Unsupported
+  # block type"), so every run for it failed. Its provider updates are made by hand: bump the
+  # constraint, run `tofu init -upgrade`, and review the plan on the pull request.
   - package-ecosystem: terraform
-    directories: [/infra/bootstrap, /infra/envs/prod]
+    directory: /infra/bootstrap
     schedule: { interval: weekly }
