@@ -259,18 +259,10 @@ Final check before you start:
 
 ## 6. Recording script
 
-The talking points are suggestions; the actions are what matter.
-
 **Scene 1: what is running (1 min)**
 
 - **Show:** Argo CD's **Applications** page with four apps, all Synced and Healthy.
-- **Say:**
-  - "Argo CD runs inside the cluster and pulls from Git. No CI system has credentials to
-    this cluster."
-  - "`root` is the app of apps; `argocd` manages Argo CD itself, and `monitoring` is the
-    Prometheus and Grafana stack."
 - Open **healthqueue-api** and point at the Pod.
-- **Say:** "This image is pinned by digest, signed with cosign, and has SLSA provenance."
 - Point at terminal C: it shows version 0.1.0 and the old commit.
 
 **Scene 2: how we know it is healthy (2 min)**
@@ -278,24 +270,10 @@ The talking points are suggestions; the actions are what matter.
 - Switch to the Grafana tab, showing **HealthQueue SLOs**.
 - **Show the top row:** the availability SLI, the latency SLI and the error budget left for
   each.
-- **Say:**
-  - "Two SLOs over 30 days: 99.5% of API requests succeed, and 99% are served within 300
-    milliseconds."
-  - "99.5% and not higher, because this is one SQLite replica, and every deploy costs a few
-    seconds. A promise the architecture can't keep would only produce noise."
 - **Show** the two **burn rate** graphs.
-- **Say:**
-  - "We don't page on an error spike. We page when the error budget is being spent fast:
-    14.4 times the sustainable rate over both an hour and five minutes."
-  - "The alert rules have unit tests. CI feeds them synthetic outages and fails the pull
-    request if an alert doesn't fire."
 - **Show** **Requests per second by route and status**: 201 bookings, a few 409 clashes, and
   404s.
-- **Say:** "Clashes and unknown IDs are correct answers, so they don't spend budget. Only 5xx
-  and slow responses do."
 - **Show** **What is deployed**: the image digest, and every Argo CD application's state.
-- **Say:** "This dashboard is code. It's provisioned from Git and changed through pull
-  requests like everything else."
 
 **Scene 3: a release is a pull request (2 min)**
 
@@ -304,8 +282,6 @@ The talking points are suggestions; the actions are what matter.
   - the PR body: built-from commit, compare link, digest, vulnerability counts, evidence
     location, verify commands;
   - **Files changed**: two lines, the digest and its evidence pointer.
-- **Say:** "The pipeline built, scanned, signed and verified this image, then proposed it.
-  Nothing reaches production without a reviewed merge."
 - Show the green checks, then click **Rebase and merge**.
 
 **Scene 4: GitOps rollout (1–3 min)**
@@ -314,19 +290,13 @@ The talking points are suggestions; the actions are what matter.
   own, within 3 minutes.)
 - **Watch:** the app goes **OutOfSync**, then syncs. A new ReplicaSet appears; the old pod
   terminates and the new one starts.
-- **Say:** "The strategy is Recreate, because SQLite allows one writer (ADR-0005), so there
-  are a few seconds of downtime. PostgreSQL would allow rolling updates."
 - Terminal C briefly shows `(no ready pod)`, then `{"version":"0.2.0","commit":"<new commit>"}`.
-- **Say:** "Merge is the deployment, and rollback is reverting that merge."
 
 **Scene 5: self-healing (1 min)**
 
-- **Say:** "What if someone changes production by hand?"
 - In terminal D, run the pre-typed `kubectl ... --replicas=0`.
 - **Watch:** Argo CD flags the drift and restores 1 replica within a few seconds. The pod
   reappears in the tree, and terminal C recovers.
-- **Say:** "Git is the source of truth; manual drift is reverted automatically and shows in
-  the app's history."
 
 **Optional scene 6: rollback (2–3 min)**
 
