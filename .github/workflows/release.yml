@@ -32,8 +32,9 @@ env:
   REPOSITORY: healthqueue-api
   EVIDENCE_ACCOUNT: sthqevidenceora3w
   EVIDENCE_CONTAINER: release-evidence
-  # Keyless signatures and provenance are bound to this workflow on main. Verifiers
-  # (cosign, gh attestation verify, Kyverno) pin exactly this identity.
+  # Keyless signatures and provenance are bound to this workflow on main. Verifiers (cosign
+  # and gh attestation verify below; Kyverno once phase 9 is built) pin exactly this identity,
+  # so an image signed by any other workflow or branch is rejected.
   SIGNER_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/heads/main
   OIDC_ISSUER: https://token.actions.githubusercontent.com
 
