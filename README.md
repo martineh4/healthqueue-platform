@@ -1,173 +1,359 @@
 # HealthQueue Platform
 
-HealthQueue's appointment scheduling API, and the platform that takes a reviewed change to
-production and shows whether it is healthy there.
+[![CI](https://github.com/martineh4/healthqueue-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/martineh4/healthqueue-platform/actions/workflows/ci.yml)
+[![Release](https://github.com/martineh4/healthqueue-platform/actions/workflows/release.yml/badge.svg)](https://github.com/martineh4/healthqueue-platform/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-- **Built for one maintainer.** Every production change is reviewed, traceable to its source
-  commit, and reversible with one revert.
-- **Run in a course environment:** Azure, plus a Kubernetes cluster in a Codespace.
-- **Production path:** each production decision is recorded, including where it would differ
-  from the course environment.
+A DevOps capstone, written up as a case study. It covers a patient appointment-scheduling API and
+the delivery platform around it. Every production change is reviewed, traceable to its source
+commit, signed, recorded in write-once storage, and reversible with one revert.
 
-## For leadership: what this gives you
+**Hannah Martinez** · All data is synthetic. No patient information is stored anywhere.
 
-| Question | Answer | Evidence |
+## Project Summary
+
+HealthQueue is an appointment-booking API (FastAPI, Python 3.13). The application is
+deliberately small. The project is the path it takes to production:
+
+- **Pull request checks:** tests with a coverage gate, code and container linting, vulnerability
+  and secret scanning, and Kubernetes manifest validation. All are required before merge.
+- **Release:** builds the image and blocks it on fixable HIGH or CRITICAL vulnerabilities. It
+  then generates an SBOM, signs the image keylessly, attests SLSA provenance, verifies all of it,
+  and writes the evidence to write-once storage.
+- **Promotion:** each release is proposed as a pull request that pins the new image digest.
+  **Merging is the deployment; reverting is the rollback.**
+- **Infrastructure:** OpenTofu manages it on Azure through the same review flow, with encrypted
+  remote state and no stored cloud credentials.
+- **GitOps:** Argo CD makes the Kubernetes cluster match Git and undoes manual changes.
+- **Reliability:** two SLOs with an error budget, burn-rate alerts that are unit-tested in CI, a
+  Grafana dashboard and runbooks.
+- **Delivery metrics:** a 90-day DORA analysis with toil-reduction recommendations.
+
+Where to look next: [architecture](docs/architecture.md),
+[supply chain security](docs/supply-chain-slsa.md), [observability plan](docs/observability.md),
+[DORA analysis](docs/dora-report.md), [decision records](docs/adr/README.md),
+[runbooks](docs/runbooks/), [evidence per phase](docs/evidence/), and the
+[course guide](docs/course-guide.md) (rubric map, phases, quickstart, API).
+
+## Problem Statement
+
+Teams that ship software into regulated settings answer the same questions at every audit.
+Biotech and healthcare are examples, where data integrity and traceability are expected:
+
+- **Who changed production, when, and who approved it?**
+- **Is what is running exactly what was tested?** Could it have been swapped or rebuilt
+  differently?
+- **What is inside it,** and are we affected by the vulnerability announced this morning?
+- **Can anyone reach sensitive data,** or production, with a leaked password?
+- **How do we know it is working,** before users tell us?
+
+A common answer is manual: release checklists, screenshots, shared admin accounts, and
+spreadsheets of what was deployed. That approach is slow, and the records stop being trustworthy
+the first time someone skips a step.
+
+The goal here was to make the answers **a by-product of the delivery process itself**. A
+one-person team should be able to ship several times a week and still hand an auditor a complete,
+tamper-evident record.
+
+| What regulated teams care about | How this project addresses it | Evidence |
 |---|---|---|
-| Can anything reach production without review? | No. Production runs the image digest pinned in Git, and that changes only by a merged pull request with passing checks. Merging is the deployment; reverting is the rollback. | [ADR-0007](docs/adr/0007-pr-driven-image-promotion.md), [phase 8](docs/evidence/phase-8-deploy-pr.md) |
-| Do we know exactly what we run? | Yes. Each image is signed, has an SBOM and SLSA Build L2 provenance, and its evidence is kept in write-once storage. Fixable HIGH and CRITICAL vulnerabilities block the release. | [Supply chain summary](docs/supply-chain-slsa.md), [phase 5](docs/evidence/phase-5-release.md) |
-| Are there credentials to steal? | No long-lived ones. CI reaches Azure and signs images with short-lived OIDC tokens, and nothing in CI can reach the cluster. | [ADR-0003](docs/adr/0003-github-actions-workload-identity.md), [architecture](docs/architecture.md#identities-and-trust-boundaries) |
-| How do we know it is healthy? | Two SLOs: 99.5% of requests succeed, and 99% are served in 300 ms. Alerts fire when the error budget burns too fast, and each alert links to a runbook. | [Observability plan](docs/observability.md), [phase 10](docs/evidence/phase-10-observability.md) |
-| How fast and safe is delivery? | On 90 days of synthetic data modelling this process: lead time and recovery are at the DORA elite level, and deployment frequency is high. The report ranks what to change next. | [DORA analysis](docs/dora-report.md) |
+| **Audit trail** | Production changes only through merged pull requests: Git history records who proposed, who approved and when. Each release writes scan results, SBOM, signature and provenance to storage that cannot be altered or deleted during retention (in the course environment the policy is unlocked, with 7-day retention; production would lock it at six years). Infrastructure changes are planned on the pull request and applied on merge. | [Phase 8](docs/evidence/phase-8-deploy-pr.md), [phase 5, WORM evidence](docs/evidence/phase-5-release.md#4-evidence-in-worm-storage) |
+| **Reproducible deployments** | Images are referenced by immutable digest, never by tag. The base image is pinned by digest, dependencies by hash, GitHub Actions by commit SHA, and CI tools by checksum. Infrastructure and cluster state are declared in code. | [ADR-0006](docs/adr/0006-gitops-with-argo-cd.md), [`ci.yml`](.github/workflows/ci.yml) |
+| **Signed artifacts** | cosign keyless signatures logged in the public Rekor transparency log, plus SLSA Build L2 provenance and an attested SBOM. All three are verified in the pipeline and again from a separate workstation. | [Phase 5, independent verification](docs/evidence/phase-5-release.md#3-independent-verification-from-a-workstation-not-the-ci-runner), [supply chain](docs/supply-chain-slsa.md) |
+| **Protecting sensitive data** | No long-lived cloud credentials: short-lived OIDC tokens only. State is encrypted with a Key Vault key, and no secrets are kept in Git. Network traffic is denied by default, pods run under the `restricted` Pod Security profile, and logs and metrics record route templates, never patient or appointment IDs. All data is synthetic. | [ADR-0003](docs/adr/0003-github-actions-workload-identity.md), [ADR-0002](docs/adr/0002-opentofu-state-management.md), [architecture: trust boundaries](docs/architecture.md#identities-and-trust-boundaries) |
 
-**Known gaps, by decision:**
+> **Scope note.** This is a course project, not a validated system. It has not been assessed
+> against GxP, 21 CFR Part 11 or HIPAA. It demonstrates the engineering controls that such
+> assessments rely on: attributable changes, original and tamper-evident records, and least
+> privilege.
 
-- **The cluster does not verify signatures yet.** Phase 9, admission control with Kyverno, is
-  deferred. Today the control is the reviewed deploy pull request.
-- **Production would differ.** It would run on AKS with PostgreSQL and no pull secret. The
-  course environment uses kind, SQLite on one replica, and a 30-day pull token.
-- **The DORA figures are simulated.** The report explains how to run it on real deployments.
+## Technologies Used
 
-Details: [architecture, "Not built yet"](docs/architecture.md#not-built-yet).
-
-## Start here
-
-1. **[Architecture](docs/architecture.md):** the system on one page and how a change flows.
-2. **[Supply chain security summary](docs/supply-chain-slsa.md):** controls by threat, and
-   the SLSA level.
-3. **[Observability plan](docs/observability.md):** SLOs, alerts, dashboard, error budget
-   policy.
-4. **[DORA analysis](docs/dora-report.md):** delivery metrics against the 2024 benchmarks, and
-   the recommendations.
-5. **[Demo-day guide](docs/demo-day.md):** the live walkthrough, step by step.
-
-## Rubric map
-
-Where each part of the capstone rubric (150 points, five criteria of 30) is covered, and the
-evidence that shows it working.
-
-**Required supporting documents**
-
-| Document | File |
+| Area | Tools (versions as pinned in the repository) |
 |---|---|
-| Observability plan | [`docs/observability.md`](docs/observability.md) |
-| DORA analysis | [`docs/dora-report.md`](docs/dora-report.md) |
-| Supply chain security summary | [`docs/supply-chain-slsa.md`](docs/supply-chain-slsa.md) |
+| Application | Python 3.13, FastAPI, Uvicorn, `prometheus-client`, SQLite; pytest, Ruff |
+| Container | Docker multi-stage build on a digest-pinned `python:3.13-slim` base; non-root UID 10001; pip removed from the runtime image |
+| CI/CD | GitHub Actions (3 workflows, actions pinned by commit SHA), Dependabot |
+| Security scanning | Trivy v0.75.0 (dependencies, secrets, misconfiguration, image), hadolint |
+| Supply chain | Syft (SPDX 2.3 SBOM), cosign v3.1.3 keyless signing with Sigstore (Fulcio, Rekor), GitHub artifact attestations (SLSA provenance) |
+| Infrastructure as code | OpenTofu 1.13.1 with the `azurerm` provider ~> 5.9, client-side state encryption (`azure_vault` key provider) |
+| Cloud | Azure: Container Registry, Storage (zone-redundant, WORM immutability policy), Key Vault, user-assigned managed identities with GitHub OIDC federation |
+| Kubernetes | Kubernetes 1.37 on kind, Kustomize v5.8.3, kubeconform v0.8.0, Pod Security Admission, NetworkPolicy |
+| GitOps | Argo CD v3.5.4 (app of apps, AppProjects as guardrails) |
+| Observability | kube-prometheus-stack 92.3.0: Prometheus 3.15.0, Alertmanager 0.34.1, Grafana 13.2.3; promtool rule tests |
+| Analysis | Python standard library only: a seeded DORA simulation, metrics, and SVG charts |
+| Environment | GitHub Codespaces with a digest-pinned dev container |
 
-### 1. CI/CD Pipeline with Supply Chain Security (CLO2)
+## Architecture Overview
 
-| Rubric asks for | Where | Evidence |
-|---|---|---|
-| Build | [`release.yml`](.github/workflows/release.yml): digest-pinned base, hash-locked dependencies ([`app/Dockerfile`](app/Dockerfile), [`requirements.lock`](app/requirements.lock)) | [Phase 5: release runs](docs/evidence/phase-5-release.md#1-release-runs) |
-| Test | [`ci.yml`](.github/workflows/ci.yml) `lint-test`: ruff, pytest with an 85% coverage gate; required on every pull request | [`ci.yml`](.github/workflows/ci.yml) required checks |
-| Vulnerability scan | Trivy on the repository and the image in every pull request; release gate on fixable HIGH and CRITICAL | [Phase 5: vulnerability findings](docs/evidence/phase-5-release.md#5-vulnerability-findings-explained) |
-| SBOM | Syft SPDX SBOM, attested to the image | [Phase 5: in-pipeline verification](docs/evidence/phase-5-release.md#2-in-pipeline-verification-fails-the-release-if-any-check-fails) |
-| Signed artifacts | cosign keyless signature and SLSA provenance, verified in the pipeline and independently | [Phase 5: independent verification](docs/evidence/phase-5-release.md#3-independent-verification-from-a-workstation-not-the-ci-runner), [WORM evidence](docs/evidence/phase-5-release.md#4-evidence-in-worm-storage) |
-| SLSA alignment documented | [Supply chain summary: SLSA assessment](docs/supply-chain-slsa.md#slsa-assessment) (Build L2; the L3 gap and its plan), [controls by threat](docs/supply-chain-slsa.md#controls-by-threat) | [Supply chain: gaps](docs/supply-chain-slsa.md#gaps-and-roadmap) |
+```mermaid
+flowchart LR
+  dev([Engineer])
 
-### 2. Infrastructure as Code and GitOps Deployment (CLO3)
+  subgraph gh["GitHub: review and automation"]
+    pr["Pull request<br/>required checks:<br/>tests, scans, manifests"]
+    main[("main branch<br/>protected")]
+    rel["Release pipeline<br/>build, scan, SBOM,<br/>sign, attest, verify"]
+    dpr["Deploy pull request<br/>new image digest"]
+    infra["Infra pipeline<br/>plan on PR, apply on merge"]
+  end
 
-| Rubric asks for | Where | Evidence |
-|---|---|---|
-| OpenTofu provisions cloud resources | [`infra/`](infra/README.md): registry, evidence storage, CI identities on Azure | [Phase 4: merge applies](docs/evidence/phase-4-iac-oidc.md#4-merge-apply-as-the-apply-identity) |
-| Remote state | Encrypted, locked Azure state ([ADR-0002](docs/adr/0002-opentofu-state-management.md), [how state is handled](infra/README.md#how-state-is-handled)) | [Phase 3: ciphertext at rest](docs/evidence/phase-3-remote-state.md#4-state-is-ciphertext-at-rest), [locking](docs/evidence/phase-3-remote-state.md#5-locking-prevents-concurrent-runs) |
-| Containerized app on Kubernetes | [`app/Dockerfile`](app/Dockerfile), [`deploy/`](deploy/README.md): hardened manifests under `restricted` Pod Security | [Phase 7: workload verification](docs/evidence/phase-7-argocd.md#3-workload-verification), [phase 10: Pod Security](docs/evidence/phase-10-observability.md#3-pod-security) |
-| Deployed via Argo CD | App of apps ([ADR-0006](docs/adr/0006-gitops-with-argo-cd.md)) | [Phase 7: GitOps controls](docs/evidence/phase-7-argocd.md#4-gitops-controls) |
-| PR-driven workflow | Infrastructure: plan on the PR, apply on merge ([infra pull requests](infra/README.md#day-to-day-prod-pull-requests)). Application: a deploy PR per release, where merge = deploy ([ADR-0007](docs/adr/0007-pr-driven-image-promotion.md)) | [Phase 4: plan on the PR](docs/evidence/phase-4-iac-oidc.md#3-pull-request-4-plan-as-the-read-only-identity), [phase 8](docs/evidence/phase-8-deploy-pr.md) |
+  subgraph az["Azure"]
+    acr[("Container registry<br/>images by digest")]
+    worm[("Evidence storage<br/>write-once")]
+    state[("OpenTofu state<br/>encrypted")]
+  end
 
-### 3. DORA Metrics Analysis and Toil Reduction (CLO4)
+  rekor[("Sigstore Rekor<br/>public signature log")]
 
-| Rubric asks for | Where | Evidence |
-|---|---|---|
-| Synthetic 90-day DORA data | [`dora/generate.py`](dora/generate.py) (seeded, modelling the real pipeline), [`dora/data/`](dora/data/) | [How the data is made](docs/dora-report.md#how-the-data-is-made) |
-| Analyzed against benchmarks | [`dora/analyze.py`](dora/analyze.py): the four metrics against the DORA 2024 elite, high, medium and low levels, with charts | [Summary](docs/dora-report.md#summary), [robustness across 20 seeds](docs/dora-report.md#robustness-across-seeds) |
-| Toil-reduction recommendations tied to evidence | Each recommendation cites a number from the data and a projection from rerunning the same seed | [Recommendations](docs/dora-report.md#recommendations-in-order), [toil](docs/dora-report.md#toil) |
+  subgraph k8s["Kubernetes cluster"]
+    argo["Argo CD<br/>syncs main"]
+    api["HealthQueue API<br/>restricted pods"]
+    mon["Prometheus, Grafana,<br/>Alertmanager"]
+  end
 
-CI regenerates the data, report and charts on every pull request and fails if the committed
-files differ.
-
-### 4. Observability and SRE Reliability Evaluation (CLO5)
-
-| Rubric asks for | Where | Evidence |
-|---|---|---|
-| SLIs/SLOs for the appointment API | [Service level objectives](docs/observability.md#service-level-objectives): availability 99.5%, latency 99% in 300 ms, over 30 days | [Phase 10: Prometheus scrapes the API](docs/evidence/phase-10-observability.md#4-prometheus-scrapes-the-api) |
-| Error budget computed | Budget per SLO (0.5% of requests, about 3.6 hours of outage in 30 days), recording rules, [error budget policy](docs/observability.md#error-budget-policy), burn-rate alerts with unit tests ([`observability/`](observability/)) | [Phase 10: live budget and rules](docs/evidence/phase-10-observability.md#9-re-check-after-pr-21-merged) |
-| Metrics, logs and traces, with rationale | [Signals](docs/observability.md#signals): metrics, JSON logs without PHI. [Gaps and production differences](docs/observability.md#gaps-and-production-differences): log store and tracing, and why not yet ([ADR-0008](docs/adr/0008-observability-and-slos.md)) | [Phase 10: Grafana loads the dashboard](docs/evidence/phase-10-observability.md#6-grafana-loads-the-dashboard) |
-
-### 5. Production-Grade Design and Technical Documentation (CLO6)
-
-| Rubric asks for | Where |
-|---|---|
-| Architecture | [`docs/architecture.md`](docs/architecture.md): system diagram, change flow, trust boundaries, course and production designs |
-| Runbooks | [`docs/runbooks/`](docs/runbooks/): API unavailable, SLO burn rate, Argo CD sync, image pull failures |
-| ADRs | [Eight ADRs](docs/adr/README.md), each with alternatives considered and when to revisit |
-| README | This file |
-| Decisions and trade-offs for a CTO | [For leadership](#for-leadership-what-this-gives-you) above; [course environment and production](docs/architecture.md#course-environment-and-production); [supply chain summary for leadership](docs/supply-chain-slsa.md#summary-for-leadership); the approval-click trade-off ([DORA report](docs/dora-report.md#1-decide-when-to-trade-the-approval-click-for-speed)) |
-
-## Phases
-
-| Phase | Delivered | Status | Evidence |
-|---|---|---|---|
-| 0–1 | Repository scaffold; appointment API with tests | Done | `app/tests`, CI `lint-test` |
-| 2 | PR pipeline (lint, tests with an 85% coverage gate, hadolint, Trivy); hardened image | Done | [`ci.yml`](.github/workflows/ci.yml) |
-| 3 | OpenTofu remote state, encrypted with a Key Vault key | Done | [phase 3](docs/evidence/phase-3-remote-state.md), [ADR-0002](docs/adr/0002-opentofu-state-management.md) |
-| 4 | Infrastructure by pull request, with GitHub OIDC and least-privilege identities | Done | [phase 4](docs/evidence/phase-4-iac-oidc.md), [ADR-0003](docs/adr/0003-github-actions-workload-identity.md) |
-| 5 | Signed, attested release pipeline with WORM evidence | Done | [phase 5](docs/evidence/phase-5-release.md), [supply chain](docs/supply-chain-slsa.md) |
-| 6 | Hardened Kustomize manifests; pull-only registry token | Done | [phase 6](docs/evidence/phase-6-manifests.md), [ADR-0004](docs/adr/0004-registry-pull-authentication.md) |
-| 7 | GitOps with Argo CD (app of apps) on kind | Done | [phase 7](docs/evidence/phase-7-argocd.md), [ADR-0006](docs/adr/0006-gitops-with-argo-cd.md) |
-| 8 | A deploy pull request for every verified release | Done | [phase 8](docs/evidence/phase-8-deploy-pr.md), [ADR-0007](docs/adr/0007-pr-driven-image-promotion.md) |
-| 9 | Signature enforcement at admission (Kyverno) | **Deferred** | [supply chain gaps](docs/supply-chain-slsa.md#gaps-and-roadmap) |
-| 10 | Monitoring stack, SLOs, burn-rate alerts, dashboard | Done, verified live | [phase 10](docs/evidence/phase-10-observability.md), [ADR-0008](docs/adr/0008-observability-and-slos.md) |
-| 11 | DORA metrics from a seeded 90-day simulation | Done | [DORA report](docs/dora-report.md) |
-| 12 | Documentation: architecture, this README, consistency pass | Done | [architecture](docs/architecture.md) |
-
-## Documentation
-
-| | |
-|---|---|
-| Decisions | [ADR index](docs/adr/README.md): region, state, CI identity, registry pull, data store, GitOps, promotion, observability |
-| Operations | Runbooks: [API unavailable](docs/runbooks/api-unavailable.md), [SLO burn rate](docs/runbooks/slo-burn-rate.md), [Argo CD sync](docs/runbooks/argocd-sync.md), [image pull failures](docs/runbooks/image-pull-failures.md) |
-| Evidence | [`docs/evidence/`](docs/evidence/): what was run, when, and what it showed, for each phase |
-| Component guides | [Infrastructure](infra/README.md), [Kubernetes deployment](deploy/README.md) |
-
-## Repository layout
-
-| Path | Purpose |
-|---|---|
-| `app/` | FastAPI appointment API, tests, Dockerfile |
-| `.github/workflows/` | CI (PR checks), release (build → scan → SBOM → sign → attest), infra |
-| `infra/` | OpenTofu: state bootstrap, Azure modules, `prod` environment |
-| `deploy/` | Kustomize base/overlays and Argo CD applications |
-| `observability/` | The API's scrape config, SLO recording rules, burn-rate alerts (with promtool tests) and Grafana dashboard ([docs](docs/observability.md)) |
-| `dora/` | Seeded 90-day deployment simulation, DORA metrics and charts ([report](docs/dora-report.md)) |
-| `docs/` | Architecture, ADRs, runbooks, evidence, and the observability, supply chain and DORA documents |
-| `.devcontainer/` | Codespace with Docker, kind, Argo CD, OpenTofu, cosign, Trivy, Syft |
-
-## Quickstart (no Docker required)
-
-Use Python 3.13 to match CI and the container image (`uv venv --python 3.13` works if it is
-not installed).
-
-```bash
-cd app
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-pytest                           # tests + coverage gate (85%)
-uvicorn healthqueue.main:app --reload
+  dev --> pr -->|"review + merge"| main
+  main -->|"app change"| rel
+  main -->|"infra change"| infra --> state
+  rel --> acr
+  rel --> worm
+  rel --> rekor
+  rel -->|"proposes"| dpr -->|"human merge = deploy"| main
+  argo -->|"pulls desired state"| main
+  argo --> api
+  api -->|"pulls image"| acr
+  mon -->|"scrapes metrics"| api
 ```
 
-Open http://localhost:8000/docs for the interactive API.
+**How a change reaches production:**
 
-## API
+1. **Pull request.** All required checks run on the exact code proposed.
+2. **Merge.** A change under `app/` starts a release (about 2–3 minutes).
+3. **Deploy PR.** The release opens a deploy pull request that changes two lines: the new
+   digest and its evidence pointer.
+4. **Human merge = deploy.** A person merges it, and Argo CD rolls it out within its 3-minute
+   polling interval.
+5. **Rollback.** Revert that merge.
 
-| Method | Path | Description |
+**Credentials:**
+
+- CI never holds credentials to the cluster. The cluster pulls from Git and the registry, so a
+  compromised workflow has no path to production.
+- CI reaches Azure only through short-lived OIDC tokens scoped to a branch or environment.
+
+Full details, including trust boundaries and the course-versus-production design, are in
+[`docs/architecture.md`](docs/architecture.md).
+
+## Key Design Decisions
+
+Each decision has an [Architecture Decision Record](docs/adr/README.md) with the alternatives
+considered and the conditions for revisiting it.
+
+| Decision | Why | Trade-off accepted |
 |---|---|---|
-| `POST` | `/v1/appointments` | Book an appointment (409 on provider/patient clash) |
-| `GET` | `/v1/appointments?provider_id=&patient_id=` | List appointments (one filter required) |
-| `GET` | `/v1/appointments/{id}` | Fetch one appointment |
-| `POST` | `/v1/appointments/{id}/cancel` | Cancel an appointment |
-| `GET` | `/v1/providers/{provider_id}/availability?date=YYYY-MM-DD` | Free slots for a day |
-| `GET` | `/healthz`, `/readyz`, `/metrics` | Liveness, readiness, Prometheus metrics |
+| **Keyless OIDC identities instead of stored cloud secrets** ([ADR-0003](docs/adr/0003-github-actions-workload-identity.md)) | No secret exists to leak or rotate. Azure trusts a token only for this repository and a specific branch or environment. Separate identities handle read-only planning, applying and releasing. | More setup: a bootstrap configuration, applied once by a person, creates the identities. |
+| **Encrypted, versioned remote state** ([ADR-0002](docs/adr/0002-opentofu-state-management.md)) | The infrastructure record is sensitive. It is encrypted client-side with a Key Vault key, versioned, locked against concurrent runs, and readable only by named identities. | The storage endpoint stays public, with access control as the boundary, because GitHub-hosted runners have no fixed IPs. This is a recorded, expiring exception. |
+| **Promotion by pull request; merge = deploy** ([ADR-0007](docs/adr/0007-pr-driven-image-promotion.md)) | A person approves every production change in a reviewable, revertible record. The pipeline proposes; it never deploys. | The bot's pull requests need a manual **Approve workflows to run** click. The DORA analysis measures its cost and states when to trade it for a GitHub App. |
+| **GitOps with Argo CD** ([ADR-0006](docs/adr/0006-gitops-with-argo-cd.md)) | Git is the single source of truth. Manual drift is reverted automatically (measured: about 2 s), and AppProjects stop one application's files from touching another's namespace. | Polling adds up to 3 minutes per deploy. |
+| **Registry access: pull-only, expiring token on kind; node identity in production** ([ADR-0004](docs/adr/0004-registry-pull-authentication.md)) | The cluster can read one repository and nothing else. The password is minted with an expiry and never stored in Git or in OpenTofu state. | A manual rotation every 30 days in the course environment. AKS removes it. |
+| **SQLite on one replica; PostgreSQL in production** ([ADR-0005](docs/adr/0005-sqlite-single-replica-data-store.md)) | Kept the course environment free and simple. | One writer means `Recreate` deploys with a few seconds of downtime, and no rolling or canary releases yet. |
+| **SLO-based alerting** ([ADR-0008](docs/adr/0008-observability-and-slos.md)) | Alerts fire when the error budget burns fast enough to threaten the objective, not on every blip, so people are paged only when it matters. | Needs enough traffic to be meaningful. Rules are unit-tested to compensate. |
+| **Azure region** ([ADR-0001](docs/adr/0001-azure-region-selection.md)) | `swedencentral`, because the subscription's policy allows only certain regions. Production would use `eastus2`, paired with `centralus`. | The course and production regions differ. Region is a single variable. |
 
-Configuration is via environment variables: `HQ_DB_PATH`, `HQ_CLINIC_OPEN_HOUR`,
-`HQ_CLINIC_CLOSE_HOUR`, `HQ_SLOT_MINUTES`, `HQ_LOG_LEVEL`.
+## Challenges and How I Solved Them
+
+**1. A Windows quirk defeated secret masking in logs.**
+- **What happened:** the first infrastructure plan failed with "subscription ID … is not known".
+  Secrets piped from Windows PowerShell 5.1 had picked up an invisible byte-order mark. Because
+  the stored value never appeared verbatim, GitHub's log masking missed the real ID in the output.
+- **Fix:**
+  - re-set every secret from bash and validated each one;
+  - deleted the affected logs and the PR comment;
+  - made the plan-comment script redact *any* GUID as a backstop;
+  - documented the pitfall.
+- **Impact:** the subscription ID is an identifier, not a credential, so no access was exposed.
+  ([Phase 4](docs/evidence/phase-4-iac-oidc.md#3-pull-request-4-plan-as-the-read-only-identity))
+
+**2. Bot-opened deploy pull requests did not get their required checks.**
+- **What happened:** pull requests opened with the workflow's own token don't trigger CI. A
+  dispatched run passed, but it never satisfied branch protection.
+- **Options:** register a GitHub App, or have the maintainer click **Approve workflows to run**.
+- **Decision:** I kept the click as a deliberate control (ADR-0007). I then measured its cost in
+  the DORA analysis and wrote down when to trade it for speed.
+  ([Phase 8](docs/evidence/phase-8-deploy-pr.md#3-finding-how-bot-pull-requests-get-their-required-checks))
+
+**3. "Healthy" was not the same as "up to date".**
+- **What happened:** during a rehearsal, the cluster bootstrap reported the app Synced and Healthy
+  from Argo CD's last comparison. Meanwhile a 76-minute-old pod was still running the previous
+  image.
+- **Fix:** the bootstrap now forces a hard refresh and waits until Argo CD reports the commit
+  that is on `main`. ([Phase 8](docs/evidence/phase-8-deploy-pr.md#4-demo-day-rehearsal-resumed-codespace))
+
+**4. A metric that CI could not prove was impossible.**
+- **What happened:** I planned to alert on the registry password's expiry date through
+  kube-state-metrics. Every CI check passed. Only the running exporter revealed it cannot read
+  annotations from core resources such as Secrets. The "metric missing" safety alert I had
+  written was already pending, which is how the gap surfaced.
+- **Fix:** I removed the metric and its alerts and kept a script-based expiry warning.
+- **Production:** none of this is needed, because AKS uses the node identity and has no
+  password. ([Phase 10](docs/evidence/phase-10-observability.md#5-finding-the-pull-password-expiry-metric-never-existed))
+
+**5. An alarming vulnerability total.**
+- **What happened:** the first release report showed 164 findings, which read as a failing
+  grade.
+- **Analysis:** all of them were in Debian OS packages with **no fix available yet**. Python
+  dependencies had zero.
+- **Fix:** the release record now separates *fixable* from *unfixed* findings. The gate blocks
+  any fixable HIGH or CRITICAL, and the unfixed ones are tracked as known risk.
+  ([Phase 5](docs/evidence/phase-5-release.md#5-vulnerability-findings-explained))
+
+**6. A demo script that raced the application's startup.**
+- **What happened:** after the Codespace resumed, every pod restarted. The traffic generator
+  connected at 03:02:03, but the API only began listening at 03:02:09, and the first refused
+  connection ended the whole run.
+- **Diagnosis:** the restart count looked like crashes, but restart events and node logs showed
+  they were node restarts.
+- **Fix:** the script now waits until the API is ready, tolerates refused connections, and
+  reconnects to a replacement pod.
+
+## Outcomes and Metrics
+
+Measured on the real pipeline and cluster unless marked otherwise.
+
+**Pipeline**
+- **Tests:** 30 application tests with **100% line coverage**, against a required 85%. There are
+  also 33 tests for the DORA analysis.
+- **Pull request checks:** each check job finished in about a minute or less on the latest pull
+  request (#27); the longest, `image-scan`, took 45 s.
+- **Releases:** 7 of 8 release runs succeeded, each in **1 min 45 s to 2 min 51 s**. The one
+  failure was a bug in the step that writes the release record, found on the first run. It was
+  fixed in the next run, and no evidence was written for the failed run.
+- **Vulnerabilities in the latest release:** **0 fixable HIGH or CRITICAL**. The SBOM lists
+  105 packages. The 164 known OS-package vulnerabilities (44 HIGH) have no fix available yet.
+- **Infrastructure:** the latest apply after merge reported `0 added, 0 changed, 0 destroyed`,
+  confirming the code matches the cloud.
+
+**Delivery and operations**
+- **Merge to deploy proposal:** 2 min 48 s from merging an app change to the deploy pull
+  request opening, fully signed and verified.
+- **Rollout:** 27 s from Argo CD refresh to the new pod being Ready, reporting the exact commit
+  the deploy PR named.
+- **Drift:** a manual `kubectl scale --replicas=0` was reverted in about **2 s**.
+- **Policy:** an application targeting a namespace outside its project was **refused** before
+  anything synced.
+- **Monitoring:** **15/15** Prometheus targets up, and 26 alerting and recording rules loaded
+  with 0 errors. All 11 dashboard panels returned data. The rendered monitoring stack (96
+  objects) was identical to what Argo CD applied.
+
+**Reliability targets**
+- **Availability:** 99.5% of requests succeed over 30 days. That gives an error budget of 0.5%
+  of requests, about **3.6 hours** of total outage.
+- **Latency:** 99% of requests are served within 300 ms.
+
+**DORA metrics (synthetic: 90 days simulated from the real pipeline's measured step times;
+human behaviour and failure rates are stated assumptions)**
+
+| Metric | Result | DORA 2024 level |
+|---|---|---|
+| Deployment frequency | 0.71 a day | High |
+| Change lead time (median) | 4 h 40 min | Elite |
+| Change failure rate | 6.2% (4 of 64) | High or medium |
+| Failed deployment recovery time (median) | 41 min | Elite |
+
+**Toil:**
+- **The largest single cost:** the approval click accounts for 42.7% of lead time.
+- **Total:** 7.0 hours of toil over 90 days.
+- **Projected effects of the recommendations:**
+  - a smoke test would bring the change failure rate to 4.7% (elite);
+  - a scripted revert would cut median recovery from 41 to 31 minutes.
+
+See the [DORA report](docs/dora-report.md).
+
+## Reflection: Course Learning Outcomes
+
+**CLO1: Cultural foundations (Understand).**
+- **Trunk-based development:** `main` is protected and every change goes through a short-lived
+  branch and a required-checks pull request. Rebase merges keep a linear history.
+- **Declarative over imperative:** Kustomize, OpenTofu and Argo CD describe the desired state,
+  and tools converge on it. Imperative scripts are limited to one-time bootstrap steps.
+- **Platform engineering:**
+  - the dev container and `bootstrap-cluster.sh` are a paved road from nothing to a running
+    platform;
+  - AppProjects act as guardrails rather than gates.
+- **Generative culture:** with one maintainer, this showed up as habits. Failures and findings
+  are written into the evidence files plainly, with cause and fix, rather than hidden.
+
+**CLO2: CI/CD with supply chain security (Apply).**
+- **Pipeline:** automated build, test and coverage gate; Trivy vulnerability, secret and
+  misconfiguration scanning; and a release gate on fixable HIGH and CRITICAL vulnerabilities.
+- **Supply chain:**
+  - Syft SBOM generation;
+  - cosign keyless signing with a Rekor transparency-log entry;
+  - SLSA Build L2 provenance;
+  - consumer-side verification in the pipeline;
+  - pinning by digest, hash and commit SHA.
+
+**CLO3: IaC, containers and GitOps (Apply).**
+- **OpenTofu:** remote, encrypted, locked state, with a plan/apply split by identity and a
+  daily drift detection run.
+- **Docker:** a multi-stage, non-root, read-only container.
+- **Kubernetes:** hardened manifests with Kustomize base and overlays.
+- **Argo CD:** an app of apps, with automated sync, pruning and self-healing.
+
+**CLO4: DORA, toil and branching (Analyze).**
+- **DORA:** I built a seeded simulation of this exact pipeline and measured the four metrics
+  against the 2024 performance levels. I also checked the conclusions across 20 seeds.
+- **Toil:** classified by kind, with each recommendation tied to a number. The approval click
+  is 42.7% of lead time.
+- **Branching trade-offs:** requiring branches to be up to date with `main` costs 7 manual
+  updates (21 min) in 90 days. Automating those updates would cost more than it saves while
+  the approval click remains (166 vs. 154 min). I compared and rejected it for now.
+
+**CLO5: Reliability (Evaluate).**
+- **SLOs:** SLIs and SLOs for availability and latency, with a computed error budget and an
+  error budget policy.
+- **Alerting:** multiwindow, multi-burn-rate alerts, unit-tested with promtool. Runbooks are
+  linked from every alert.
+- **Instrumentation effectiveness:** I assessed it on the live cluster, which is how the
+  impossible expiry metric was found.
+- **Not done:** this repository has no formal blameless postmortem. The closest are the
+  incident write-ups in the evidence files (challenge 1).
+
+**CLO6: Production-grade design (Create).**
+- **Supply chain security:** integrated end to end, from commit to running digest.
+- **Cloud-native architecture:** least-privilege identities and deny-by-default networking.
+- **Documentation for different readers:**
+  - a CTO and security audience: architecture, ADRs, supply chain summary;
+  - operators: runbooks and the demo guide.
+- **Progressive delivery is designed for but not built,** because the SQLite data store
+  requires `Recreate` deploys (see below).
+
+## What I'd Improve Next
+
+1. **Enforce signatures in the cluster (phase 9, deferred).**
+   - **Why:** today a signature is verified in CI, and the control in the cluster is the
+     reviewed deploy pull request.
+   - **What:** add Kyverno `verifyImages` through Argo CD, pinned to the release workflow's
+     keyless identity (`release.yml@refs/heads/main`). The cluster would then reject any
+     unsigned image or one signed by a different workflow, even if it were merged.
+2. **Progressive delivery.**
+   - **First:** move to PostgreSQL ([ADR-0005](docs/adr/0005-sqlite-single-replica-data-store.md)),
+     so more than one replica can run.
+   - **Then:** replace `Recreate` with canary releases (for example, Argo Rollouts). The
+     existing SLO burn-rate queries would decide automatically whether to promote or roll back.
+3. **A smoke test before production.**
+   - **What:** run each new image in a throwaway cluster in the deploy pull request's CI.
+   - **Projected:** change failure rate 6.2% → 4.7%.
+4. **SLSA Build L3.** Move the build into a reusable workflow, so that provenance cannot be
+   forged by the build steps themselves.
+5. **A scripted revert.**
+   - **What:** one command to revert a deploy and open the pull request.
+   - **Projected:** median recovery 41 → 31 min.
+6. **Postmortems and deeper telemetry.** Add a blameless postmortem template, a central log
+   store and tracing. The [observability plan](docs/observability.md#gaps-and-production-differences)
+   lists the gaps.
+7. **The production path.**
+   - **Cluster:** AKS with the node's managed identity, so no pull secret is needed.
+   - **Data:** zone-redundant PostgreSQL.
+   - **Evidence:** retention locked at six years.
+   - **Access:** SSO for Grafana.
