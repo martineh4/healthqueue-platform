@@ -76,7 +76,7 @@ tamper-evident record.
 | CI/CD | GitHub Actions (3 workflows, actions pinned by commit SHA), Dependabot |
 | Security scanning | Trivy v0.75.0 (dependencies, secrets, misconfiguration, image), hadolint |
 | Supply chain | Syft (SPDX 2.3 SBOM), cosign v3.1.3 keyless signing with Sigstore (Fulcio, Rekor), GitHub artifact attestations (SLSA provenance) |
-| Infrastructure as code | OpenTofu 1.13.1 with the `azurerm` provider ~> 5.9, client-side state encryption (`azure_vault` key provider) |
+| Infrastructure as code | OpenTofu 1.13.1 with the `azurerm` provider (5.11 in bootstrap, 5.9 in prod), client-side state encryption (`azure_vault` key provider) |
 | Cloud | Azure: Container Registry, Storage (zone-redundant, WORM immutability policy), Key Vault, user-assigned managed identities with GitHub OIDC federation |
 | Kubernetes | Kubernetes 1.37 on kind, Kustomize v5.8.3, kubeconform v0.8.0, Pod Security Admission, NetworkPolicy |
 | GitOps | Argo CD v3.5.4 (app of apps, AppProjects as guardrails) |
@@ -352,7 +352,16 @@ See the [DORA report](docs/dora-report.md).
 6. **Postmortems and deeper telemetry.** Add a blameless postmortem template, a central log
    store and tracing. The [observability plan](docs/observability.md#gaps-and-production-differences)
    lists the gaps.
-7. **The production path.**
+7. **Automated provider updates for production infrastructure.**
+   - **Today:** Dependabot updates the `infra/bootstrap` providers only. Its updater runs
+     Terraform, which cannot parse the OpenTofu state-encryption block in `infra/envs/prod`, so
+     prod provider updates are manual. The encryption stays, because it is what keeps the
+     state file unreadable without the Key Vault key.
+   - **Effect:** the two modules are on different `azurerm` versions (bootstrap 5.11.0, prod
+     5.9.0).
+   - **Fix:** a dependency-update tool with OpenTofu support would cover prod too, with the
+     same review and plan on every pull request.
+8. **The production path.**
    - **Cluster:** AKS with the node's managed identity, so no pull secret is needed.
    - **Data:** zone-redundant PostgreSQL.
    - **Evidence:** retention locked at six years.
