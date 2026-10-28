@@ -20,13 +20,15 @@ RUN /opt/venv/bin/pip install --no-deps . \
 # pip is removed from the image: the app never needs it, and its vendored libraries
 # (urllib3, msgpack, pkg_resources) were the only scanner findings in the image.
 FROM ${PYTHON_IMAGE} AS runtime
-ARG VERSION=dev
+# The Git commit the image is built from (CI passes github.sha). Served on /version and
+# recorded as the OCI `revision` label, so any running container traces back to its source.
+ARG GIT_COMMIT=dev
 LABEL org.opencontainers.image.title="healthqueue-api" \
       org.opencontainers.image.description="HealthQueue appointment scheduling API" \
       org.opencontainers.image.source="https://github.com/martineh4/healthqueue-platform" \
-      org.opencontainers.image.version="${VERSION}"
+      org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV PATH="/opt/venv/bin:${PATH}" \
-    HQ_BUILD_COMMIT="${VERSION}" \
+    HQ_BUILD_COMMIT="${GIT_COMMIT}" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 RUN python -m pip uninstall --yes pip \

@@ -78,7 +78,7 @@ jobs:
           load: true
           push: false
           tags: ${{ env.IMAGE }}:${{ env.TAG }}
-          build-args: VERSION=${{ github.sha }}
+          build-args: GIT_COMMIT=${{ github.sha }}
           # Provenance and SBOM are produced below as signed, verifiable attestations.
           provenance: false
           sbom: false
