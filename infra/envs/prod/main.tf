@@ -135,7 +135,7 @@ resource "azurerm_role_assignment" "release_evidence_write" {
 
 # Read access to one repository, nothing else: no push, no delete, no other repositories.
 # metadata/read lets clients list tags and referrers (signatures, attestations), which
-# signature verification at admission (phase 9) needs.
+# signature verification at admission will need (phase 9, deferred).
 resource "azurerm_container_registry_scope_map" "api_pull" {
   name                    = "healthqueue-api-pull"
   description             = "Pull healthqueue-api images and their signatures. Nothing else."
