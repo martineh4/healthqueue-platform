@@ -1,3 +1,6 @@
+# Alerting rules are written as code, reviewed like code and unit-tested in CI, so an alert
+# is known to fire (and to stay quiet) in the situations it was designed for.
+#
 # Platform alerts: is GitOps delivery itself healthy? (argocd_app_info comes from the
 # ServiceMonitors in argocd-servicemonitors.yaml.) Tested in observability/tests.
 apiVersion: monitoring.coreos.com/v1

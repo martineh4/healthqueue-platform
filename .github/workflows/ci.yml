@@ -1,6 +1,19 @@
 # Pull-request gate. Every job here is a required status check on `main`.
-# Third-party actions are pinned to full commit SHAs (tag shown in the comment);
-# see docs/supply-chain-slsa.md for why tag pinning is not enough.
+#
+# In plain terms: this is quality control before anything is accepted. No change reaches the
+# main branch, and so no change can reach patients, until every check below passes on the
+# exact code being proposed. It plays the role of a reviewed change-control record: what was
+# proposed, what was tested, and the result, kept with the change.
+#
+#   lint-test    code style and the automated test suite (with a minimum coverage bar)
+#   hadolint     the container recipe (Dockerfile) follows best practice
+#   repo-scan    known-vulnerable libraries, accidentally committed passwords, risky config
+#   image-scan   build the container, start it, and scan what would actually ship
+#   manifests    the Kubernetes deployment files are valid, pinned and policy-compliant
+#
+# Third-party actions are pinned to full commit SHAs (tag shown in the comment). A tag such
+# as v7 can be moved to different code by whoever controls it; a commit SHA cannot, so a
+# compromised upstream project cannot change what runs here. See docs/supply-chain-slsa.md.
 name: CI
 
 on:
@@ -10,19 +23,26 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege: by default every job can only read the repository. Jobs that need more
+# ask for it individually, so a compromised step has as little power as possible.
 permissions:
   contents: read
 
+# A newer push to the same pull request cancels the older run: only the latest code matters.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Tool versions are fixed so a result can be reproduced later with the same tools.
 env:
   PYTHON_VERSION: "3.13"
   TRIVY_VERSION: v0.75.0
   IMAGE: healthqueue-api:ci-${{ github.sha }}
 
 jobs:
+  # Why: tests catch regressions before review, and the 85% coverage floor (app/pyproject.toml)
+  # stops untested code from slipping in. Dependencies install from a hash-locked file, so
+  # the tests run against exactly the library versions that will ship.
   lint-test:
     name: lint-test
     runs-on: ubuntu-24.04
@@ -31,6 +51,8 @@ jobs:
       run:
         working-directory: app
     steps:
+      # persist-credentials: false (here and below): the checkout's GitHub token is not left
+      # on disk, so later steps (third-party tools included) cannot reuse it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -66,6 +88,7 @@ jobs:
           ruff format --check .
           python -m pytest -p no:cacheprovider
 
+      # Kept for 14 days even when tests fail, so a failure can be investigated afterwards.
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -76,6 +99,8 @@ jobs:
             app/junit.xml
           retention-days: 14
 
+  # Why: catches container-recipe mistakes (unpinned packages, running as root, leftover
+  # caches) that make images larger, less reproducible or less secure.
   hadolint:
     name: hadolint
     runs-on: ubuntu-24.04
@@ -90,6 +115,10 @@ jobs:
           dockerfile: app/Dockerfile
           failure-threshold: warning
 
+  # Why: a leaked password or a library with a published, fixable vulnerability is cheapest
+  # to stop before merge. HIGH and CRITICAL findings that already have a fix fail the check.
+  # Findings with no fix published yet are skipped here, since no code change could clear
+  # them; each release record counts them (release.yml) so they stay visible.
   repo-scan:
     name: repo-scan
     runs-on: ubuntu-24.04
@@ -112,6 +141,9 @@ jobs:
           exit-code: "1"
           format: table
 
+  # Why: scanning the source is not enough; the container also contains an operating system
+  # and Python itself. This job builds the real image, proves it starts and behaves (health
+  # checks, non-root user, no package manager left inside), then scans that exact image.
   image-scan:
     name: image-scan
     runs-on: ubuntu-24.04
@@ -184,6 +216,11 @@ jobs:
           sarif_file: trivy-image.sarif
           category: trivy-image
 
+  # Why: the files in deploy/ describe what runs in the cluster. This job renders them
+  # exactly as Argo CD will, then checks they are valid Kubernetes, that every container
+  # image is pinned to an unchangeable digest, that the alerting rules behave as tested, and
+  # that our own workload passes a security-policy scan. A bad deployment file is caught in
+  # review instead of in production.
   manifests:
     name: manifests
     runs-on: ubuntu-24.04

@@ -1,5 +1,8 @@
 # Environment-neutral definition of the HealthQueue API. Overlays set the namespace and pin
 # the image digest; nothing here is deployable on its own.
+#
+# Why base + overlays (Kustomize): the shared definition is written once, and each
+# environment states only what differs. Reviewers see small, environment-specific diffs.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

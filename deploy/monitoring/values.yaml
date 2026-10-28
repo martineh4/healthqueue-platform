@@ -152,6 +152,8 @@ grafana:
       allow_sign_up: false
 
 ## kube-state-metrics -----------------------------------------------------------------------
+# kube-state-metrics reports the state of Kubernetes objects (e.g. pod restarts, replicas).
+# Its sub-chart expects `sha` to include the `sha256:` prefix, unlike the images above.
 kube-state-metrics:
   image:
     tag: v2.20.0

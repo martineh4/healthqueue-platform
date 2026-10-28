@@ -1,3 +1,5 @@
+# Tool and provider versions are constrained so every run behaves the same; the exact
+# provider builds are pinned by checksum in .terraform.lock.hcl.
 terraform {
   required_version = ">= 1.10.0"
 

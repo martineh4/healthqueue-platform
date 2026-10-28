@@ -1,3 +1,6 @@
+# Names the release workflow and deploy scripts need. The client ID is marked sensitive only
+# to keep it out of logs; it is not a credential.
+
 output "resource_group_name" {
   value = local.rg.name
 }

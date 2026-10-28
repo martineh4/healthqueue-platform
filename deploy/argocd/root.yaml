@@ -15,6 +15,8 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
+  # automated: apply merges without a manual step. prune: remove what was deleted from Git.
+  # selfHeal: undo changes made directly in the cluster.
   syncPolicy:
     automated:
       prune: true

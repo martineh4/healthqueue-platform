@@ -1,3 +1,5 @@
+# The application's own namespace: a separate compartment in the cluster with its own
+# security rules, so policies can be strict here without affecting other systems.
 apiVersion: v1
 kind: Namespace
 metadata:

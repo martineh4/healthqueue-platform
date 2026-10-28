@@ -1,3 +1,9 @@
+# GitOps, in plain terms: Argo CD runs inside the cluster and continuously makes the cluster
+# match what is in the main branch of this repository. Nobody deploys by running commands
+# against production; they merge a reviewed pull request, and Argo CD applies it. Git history
+# is therefore a complete record of who changed production, when, and with whose approval,
+# and a manual change to anything Argo CD manages is automatically reverted (ADR-0006).
+#
 # What the `root` Application syncs. `install/` is not listed: the `argocd` Application
 # manages it separately, with pruning disabled.
 apiVersion: kustomize.config.k8s.io/v1beta1

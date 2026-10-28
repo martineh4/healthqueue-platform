@@ -8,6 +8,18 @@
 #
 # Images are only ever referenced by digest downstream. The tag is a convenience for
 # humans and is never trusted. See docs/supply-chain-slsa.md.
+#
+# In plain terms: this is chain of custody for software. Like a sample that is labelled,
+# sealed and logged before it leaves the bench, every release gets:
+#   - a unique, unforgeable identity (the digest: a fingerprint of the exact bytes);
+#   - an ingredient list (the SBOM, software bill of materials);
+#   - a tamper-evident seal (a digital signature recorded in a public log);
+#   - a record of how and where it was made (SLSA provenance);
+#   - a write-once evidence record that cannot be altered or deleted during its retention
+#     period, not even by this pipeline. (The course setup keeps retention short and the
+#     policy unlocked so it can be torn down; see infra/envs/prod/main.tf.)
+# Releasing never deploys. It proposes the new version as a pull request, and a person
+# decides when it goes live (ADR-0007).
 name: Release
 
 on:
@@ -21,6 +33,7 @@ on:
 permissions:
   contents: read
 
+# Releases run one at a time and are never cancelled halfway, so evidence is never partial.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -86,6 +99,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Why a gate before the push: an image with a fixable HIGH or CRITICAL vulnerability
+      # never reaches the registry at all, so it cannot be deployed by mistake later.
       - name: Trivy image scan (gate)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -106,6 +121,8 @@ jobs:
           format: json
           output: evidence/trivy-image.json
 
+      # The SBOM lists every package inside the image. When a new vulnerability is announced,
+      # it answers "are we affected, and in which release?" without rebuilding anything.
       - name: Generate SBOM (Syft, SPDX)
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
@@ -115,6 +132,9 @@ jobs:
           upload-artifact: false
           dependency-snapshot: false
 
+      # No stored password: GitHub issues this job a short-lived identity token, and Azure
+      # accepts it only for this repository's `release` environment (ADR-0003). The IDs below
+      # are not credentials; they are kept as secrets only so public logs show them masked.
       - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }} # environment secret: id-hq-release
@@ -144,6 +164,8 @@ jobs:
       - name: Sign image (cosign keyless)
         run: cosign sign --yes "$REF"
 
+      # Provenance is a signed statement of which source commit, workflow and runner produced
+      # this digest: the software equivalent of a batch record.
       - name: Attest SLSA build provenance
         id: provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -185,6 +207,8 @@ jobs:
             --format json > evidence/sbom-verify.json
           echo "signature, provenance and SBOM attestation verified for $REF"
 
+      # One machine-readable summary per release: what was built, from which commit, by whom,
+      # with which signatures, and how many known vulnerabilities (fixable vs. not yet fixable).
       - name: Assemble release record
         id: record
         env:
@@ -264,6 +288,8 @@ jobs:
 
   # Separate job, outside the `release` environment: it holds no Azure or signing
   # credentials, only enough GitHub permissions to push one branch and open a pull request.
+  # Why a pull request instead of deploying directly: the change to production is then a
+  # reviewed, recorded, revertible decision by a person (merge = deploy, revert = rollback).
   promote:
     name: open-deploy-pr
     needs: release
