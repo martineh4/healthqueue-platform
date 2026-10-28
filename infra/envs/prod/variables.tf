@@ -1,3 +1,5 @@
+# Inputs. The subscription ID is never committed: CI passes it from a GitHub secret.
+
 variable "location" {
   description = "Azure region. See docs/adr/0001-azure-region-selection.md."
   type        = string

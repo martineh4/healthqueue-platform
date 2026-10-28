@@ -1,3 +1,7 @@
+# Network firewall rules inside the cluster. Why: a compromised or misconfigured pod should
+# not be able to reach, or be reached by, anything it has no business talking to. Everything
+# is blocked unless explicitly allowed below (deny by default, allow by exception).
+#
 # Default deny for everything in the namespace, in both directions.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

@@ -1,3 +1,6 @@
+# Values other configurations and people need after the bootstrap: where state lives and
+# which identities CI should log in as.
+
 output "resource_group_name" {
   value = azurerm_resource_group.state.name
 }

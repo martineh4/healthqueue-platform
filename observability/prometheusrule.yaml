@@ -1,5 +1,10 @@
 # HealthQueue API service level objectives (docs/observability.md, ADR-0008).
 #
+# In plain terms: an SLO is a written reliability promise, for example "99.5% of requests
+# succeed over 30 days". The 0.5% that may fail is the "error budget". Instead of alerting on
+# every blip, these rules alert when the budget is being used up fast enough to break the
+# promise: quickly enough to page someone, or slowly enough for a ticket.
+#
 #   availability  99.5% of /v1 requests return a non-5xx response   (30-day window)
 #   latency       99% of /v1 requests complete within 300 ms        (30-day window)
 #

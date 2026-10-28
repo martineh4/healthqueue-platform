@@ -17,6 +17,8 @@ spec:
     server: https://kubernetes.default.svc
     namespace: healthqueue
   revisionHistoryLimit: 10
+  # Remove what Git removed and undo manual changes; delete old objects only after the new
+  # ones are healthy (PruneLast); retry briefly if a sync fails, e.g. while a CRD installs.
   syncPolicy:
     automated:
       prune: true

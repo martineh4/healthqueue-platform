@@ -1,3 +1,6 @@
+# A stable internal address for the API. ClusterIP means reachable only inside the cluster:
+# nothing is exposed to the internet. Port 80 forwards to the container's named `http` port,
+# so the container port can change without touching anything that calls the Service.
 apiVersion: v1
 kind: Service
 metadata:

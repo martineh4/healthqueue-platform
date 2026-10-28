@@ -2,11 +2,19 @@
 #
 # The resource group itself belongs to the bootstrap (it grants CI identities their roles
 # on it); this configuration manages what goes inside it and runs as the CI apply identity.
+#
+# In plain terms, three things live here:
+#   - a private container registry, where released application images are stored;
+#   - write-once evidence storage, the release audit trail (scan reports, ingredient lists,
+#     signatures), which cannot be edited or deleted during its retention period;
+#   - the identities and permissions that let the release pipeline and the cluster use them,
+#     each limited to exactly what it needs.
 
 data "azurerm_resource_group" "prod" {
   name = "rg-healthqueue-prod"
 }
 
+# Registry and storage names must be unique across all of Azure: a random suffix, kept in state.
 resource "random_string" "suffix" {
   length  = 5
   upper   = false

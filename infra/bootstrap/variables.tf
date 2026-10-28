@@ -1,3 +1,5 @@
+# Inputs. Defaults describe this repository's environment; nothing secret has a default.
+
 variable "location" {
   description = "Azure region for all bootstrap resources. See docs/adr/0001-azure-region-selection.md."
   type        = string

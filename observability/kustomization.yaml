@@ -1,3 +1,7 @@
+# Why this lives next to the application rather than in deploy/monitoring: the team that
+# owns the service owns its reliability targets, and a change to the service and to its
+# alerts can be reviewed and deployed together.
+#
 # What HealthQueue ships to the monitoring stack: how to scrape it, its SLOs and alerts,
 # and its dashboard. Included by deploy/overlays/prod, so the service's SLOs are versioned
 # and deployed with the service (ADR-0008).

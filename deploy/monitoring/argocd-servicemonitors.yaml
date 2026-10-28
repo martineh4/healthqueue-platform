@@ -1,3 +1,6 @@
+# A ServiceMonitor tells Prometheus what to collect measurements from. Why monitor Argo CD:
+# if deployments themselves silently stop working, nothing else would show it.
+#
 # Argo CD's own metrics: sync and health state of every Application (argocd_app_info),
 # reconciliation and Git fetch timings. Argo CD's upstream NetworkPolicies already allow
 # these ports from any namespace.

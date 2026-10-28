@@ -9,6 +9,11 @@
 # The identities live in the state resource group, not the environment's, so the apply
 # identity (Contributor on the environment group) cannot edit its own federated credentials.
 # See docs/adr/0003-github-actions-workload-identity.md.
+#
+# In plain terms: separation of duties. The pipeline that proposes a change (plan) can only
+# look. The pipeline that makes a change (apply) can act only inside its own environment and
+# cannot widen its own permissions. Neither holds a password: Azure trusts a short-lived token
+# that GitHub issues for one specific repository, branch or environment ("federation").
 
 locals {
   envs = toset(sort(tolist(var.environments)))
@@ -196,6 +201,7 @@ resource "azurerm_role_assignment" "apply_state_key" {
 # Read-only: evidence is written by the release identity and is immutable anyway.
 # ---------------------------------------------------------------------------
 
+# setproduct pairs every environment with every state admin, one read grant per pair.
 resource "azurerm_role_assignment" "admin_env_blob_read" {
   for_each = { for pair in setproduct(tolist(local.envs), tolist(local.admin_ids)) :
   "${pair[0]}/${pair[1]}" => { env = pair[0], principal = pair[1] } }

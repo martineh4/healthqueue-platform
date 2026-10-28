@@ -1,3 +1,5 @@
+# Tool and provider versions are constrained so every run, in CI or on a laptop, behaves the
+# same; .terraform.lock.hcl pins the exact provider builds by checksum.
 terraform {
   required_version = ">= 1.10.0"
 

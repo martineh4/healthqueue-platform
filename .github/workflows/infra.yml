@@ -7,6 +7,13 @@
 # Azure access is OpenID Connect federation to user-assigned managed identities created by
 # infra/bootstrap; see docs/adr/0003-github-actions-workload-identity.md. The bootstrap
 # itself is applied by a human and is only validated here.
+#
+# In plain terms: cloud resources (the image registry, evidence storage, identities) are
+# described in code and changed the same way as software: propose, review, then apply. A
+# reviewer sees the exact planned change ("create this, modify that") as a comment on the
+# pull request before approving it, instead of anyone clicking through a cloud portal.
+# Planning uses a read-only identity; only the protected `prod` environment, from `main`,
+# can make changes. A daily check flags anything changed outside this process.
 name: Infra
 
 on:
@@ -36,6 +43,8 @@ env:
   TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
 jobs:
+  # Why: only pull requests that touch infra/ need a cloud plan. Skipping the rest keeps
+  # application changes fast and avoids needless calls to Azure.
   changes:
     name: changes
     runs-on: ubuntu-24.04
@@ -62,6 +71,8 @@ jobs:
           fi
           echo "infra=$infra" | tee -a "$GITHUB_OUTPUT"
 
+  # Why: formatting and syntax are checked without any cloud access, on every pull request,
+  # including the bootstrap configuration that a person applies by hand.
   validate:
     name: tofu-validate
     runs-on: ubuntu-24.04
@@ -88,6 +99,7 @@ jobs:
             echo "::endgroup::"
           done
 
+  # Why: the reviewer approves the actual effect on the cloud, not just the code diff.
   plan:
     name: tofu-plan
     needs: [changes, validate]
@@ -155,6 +167,9 @@ jobs:
         if: steps.plan.outputs.exitcode != '0'
         run: exit 1
 
+  # Why: changes are applied only after review and merge, by a dedicated identity that can
+  # act on the production resource group and nowhere else. It plans again under a state lock
+  # first, so an out-of-date plan from the pull request can never be applied.
   apply:
     name: tofu-apply
     needs: [changes, validate]
@@ -203,6 +218,9 @@ jobs:
           [ -f plan.txt ] || exit 0
           .github/scripts/plan-comment.sh plan.txt 0 "$GITHUB_SHA" "Applied to prod" >> "$GITHUB_STEP_SUMMARY"
 
+  # Why: if someone changes production by hand (an emergency fix, a mistake), the code no
+  # longer describes reality. This daily check compares the two and opens an issue, so every
+  # difference is either brought back into code or reverted.
   drift:
     name: tofu-drift
     needs: [validate]

@@ -3,9 +3,17 @@
 #   - a storage account + container holding every state file (Entra ID auth only)
 #   - a Key Vault with one RSA key per environment, used by OpenTofu's `azure_vault`
 #     key provider to encrypt that environment's state client-side
+#
+# In plain terms: OpenTofu keeps a "state" file, its record of what it has created in the
+# cloud. That record is as sensitive as the infrastructure itself, so it is stored centrally
+# (not on a laptop), encrypted, versioned so any earlier copy can be restored, locked against
+# deletion, and readable only by named people and pipelines. A person applies this one
+# configuration by hand, once; everything else is then managed through pull requests.
 
 data "azurerm_client_config" "current" {}
 
+# Storage account and Key Vault names must be unique across all of Azure, so a short random
+# suffix is added once and then kept in state.
 resource "random_string" "suffix" {
   length  = 5
   upper   = false

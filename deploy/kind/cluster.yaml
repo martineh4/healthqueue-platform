@@ -1,4 +1,5 @@
-# Local cluster for the Codespace (ADR-0006). Node image pinned by digest, as published in
+# Local cluster for the Codespace (ADR-0006). kind runs a real Kubernetes cluster inside a
+# container, which keeps the course environment free; production would use AKS instead. Node image pinned by digest, as published in
 # the kind v0.33.0 release notes; kubeconform in CI validates against the same version.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4

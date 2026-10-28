@@ -1,4 +1,9 @@
-# Monitoring stack (ADR-0008): kube-prometheus-stack rendered by kustomize, so CI validates
+# Monitoring stack (ADR-0008). In plain terms: Prometheus collects measurements from the
+# API every 30 seconds (request counts, errors, response times), Alertmanager decides who to
+# notify when something goes wrong, and Grafana draws the dashboards. Without it, the team
+# would learn about an outage from users rather than from an alert.
+#
+# kube-prometheus-stack is rendered by kustomize, so CI validates
 # exactly what Argo CD applies (Argo CD runs kustomize with --enable-helm; see
 # deploy/argocd/install). The chart is pinned by version; CI also verifies the chart
 # archive's SHA-256 before rendering it.

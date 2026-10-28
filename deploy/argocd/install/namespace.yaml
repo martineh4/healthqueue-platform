@@ -1,3 +1,4 @@
+# Argo CD's own namespace, kept apart from the workloads it manages.
 apiVersion: v1
 kind: Namespace
 metadata:

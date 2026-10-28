@@ -1,3 +1,9 @@
+# How the appointment API runs in the cluster. A Deployment tells Kubernetes "keep this
+# program running in this exact configuration"; if it crashes, Kubernetes restarts it.
+#
+# Most of the settings below are about containment: if the application were ever
+# compromised, the attacker would find a locked-down box (no admin rights, read-only files,
+# no network access out, no Kubernetes credentials) rather than a foothold.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -10,13 +16,19 @@ spec:
   replicas: 1
   strategy:
     type: Recreate
+  # Keep the last 5 old ReplicaSets for inspection. Rollback itself is a Git revert (ADR-0007).
   revisionHistoryLimit: 5
   template:
     spec:
       serviceAccountName: healthqueue-api
+      # The API never talks to Kubernetes itself, so it gets no Kubernetes credentials.
       automountServiceAccountToken: false
+      # Don't inject other services' addresses as environment variables: config is explicit.
       enableServiceLinks: false
+      # On shutdown, give in-flight requests up to 30 s to finish before the pod is stopped.
       terminationGracePeriodSeconds: 30
+      # Run as an unprivileged user (never root), with the container runtime's default
+      # system-call filter (seccomp).
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -29,6 +41,7 @@ spec:
         - name: api
           # Placeholder; every overlay replaces it with registry/repository@sha256:digest.
           image: healthqueue-api
+          # The image is pinned by digest, which never changes, so a cached copy is identical.
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -37,6 +50,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: healthqueue-api-config
+          # Requests reserve capacity so the API is scheduled where it fits; limits cap it, so
+          # a runaway process cannot starve the rest of the node.
           resources:
             requests:
               cpu: 50m
@@ -44,6 +59,7 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
+          # No way to gain privileges, no writable system files, no Linux capabilities.
           securityContext:
             allowPrivilegeEscalation: false
             privileged: false

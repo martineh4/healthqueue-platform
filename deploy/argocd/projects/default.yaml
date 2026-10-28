@@ -1,3 +1,7 @@
+# AppProjects are Argo CD's permission boundaries: which repository an application may come
+# from, which namespaces it may deploy into, and which kinds of object it may create. A
+# mistake or a malicious change in one application's files cannot spill into another's.
+#
 # Argo CD's built-in `default` project allows any repository, any cluster, any kind.
 # Locking it down means every Application must use a project that states its limits.
 apiVersion: argoproj.io/v1alpha1
