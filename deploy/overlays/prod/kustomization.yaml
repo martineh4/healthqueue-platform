@@ -25,5 +25,5 @@ labels:
 images:
   - name: healthqueue-api
     newName: crhealthqueueora3w.azurecr.io/healthqueue-api
-    # Release evidence: release-evidence/healthqueue-api/3b140b317b80d09077ca523ba4abc2e28895e6f7/
-    digest: sha256:e990092bf748ea1aa78834158d302f5036a714d2a516fdda54d5878bba7c96a7
+    # Release evidence: release-evidence/healthqueue-api/d9777c1d5a414dc8fab3819f109684f9c4fb6809/
+    digest: sha256:877be23431ea4b647cf123be974d1107ef0884ecf541a07844b3accfd2965b9a
