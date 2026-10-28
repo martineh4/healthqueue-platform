@@ -67,6 +67,35 @@ tamper-evident record.
 > assessments rely on: attributable changes, original and tamper-evident records, and least
 > privilege.
 
+## Relevance to Moderna's DevSecOps Roles
+
+Moderna's DevSecOps job postings list Python, TypeScript, GitHub Actions, Pulumi, Docker, AWS,
+JFrog, monitoring, runbooks, dashboards and developer documentation. Here is how this project
+lines up with that list.
+
+**Already used here:** Python (the API and the DORA analysis), GitHub Actions (three workflows),
+Docker, monitoring (Prometheus with burn-rate alerts), a Grafana dashboard kept as code, four
+[runbooks](docs/runbooks/) and developer documentation (eight
+[decision records](docs/adr/README.md) and an [architecture guide](docs/architecture.md)).
+
+**Not used here:** TypeScript and JFrog. Images are stored in Azure Container Registry, not
+Artifactory.
+
+**Different tools, same practices:** I built this on Azure with OpenTofu and haven't used AWS or
+Pulumi. The cloud services are different, but the practices behind them carry over:
+
+| In this project | Closest AWS / Pulumi equivalent | What carries over |
+|---|---|---|
+| GitHub OIDC federated to Azure managed identities | GitHub OIDC with IAM roles | No stored cloud credentials; each workflow gets a short-lived, narrowly scoped identity |
+| Azure Container Registry | Amazon ECR, or JFrog Artifactory | Images pushed and deployed by digest, with signatures and attestations stored next to them |
+| Storage with a WORM immutability policy | S3 Object Lock | Release evidence that can't be changed or deleted during retention |
+| Key Vault key encrypting the state | AWS KMS | A managed key protects infrastructure state |
+| OpenTofu (HCL): plan on the pull request, apply on merge, scheduled drift checks | Pulumi (Python or TypeScript): `preview` and `up` | Reviewed infrastructure changes, state kept remotely and protected, drift detection |
+
+The biggest difference is the language. Pulumi programs are written in Python or TypeScript, not
+HCL. I'd expect to spend most of my ramp-up time learning AWS IAM and Pulumi's state and secrets
+model, more than learning the workflow.
+
 ## Technologies Used
 
 | Area | Tools (versions as pinned in the repository) |
